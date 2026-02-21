@@ -1,0 +1,45 @@
+[package]
+name = "TermLink"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# GUI框架
+egui = "0.27"
+eframe = { version = "0.27", features = ["persistence"] }
+
+# SSH客户端
+ssh2 = "0.9"
+
+# 异步运行时
+tokio = { version = "1.0", features = [
+    "full",
+    "io-util",
+    "rt-multi-thread",
+    "time",
+] }
+
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 日志系统
+tracing = "0.1"
+tracing-subscriber = "0.3"
+env_logger = "0.11"
+
+# 实用工具
+anyhow = "1.0"                                     # 错误处理
+thiserror = "2.0.18"                               # 错误定义
+directories = "6.0.0"                              # 跨平台路径处理
+chrono = { version = "0.4", features = ["serde"] } # 时间处理
+
+# 系统集成
+arboard = "3.3"      # 剪贴板支持
+vte = "0.15.0"
+termwiz = "0.23.3"
+egui-async = "0.3.4"
+
+[dev-dependencies]
+# 测试依赖
+tempfile = "3.0"
