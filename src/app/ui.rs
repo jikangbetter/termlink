@@ -2,16 +2,320 @@
 //! 包含主应用的用户界面实现
 
 use crate::config::settings::ConnectionGroup;
+use crate::config::settings::ThemeMode;
 use crate::config::{AppSettings, ConnectionConfig};
+use crate::i18n::{I18nKey, I18nManager, Language};
 use crate::ssh::{ConnectionManager, ConnectionTestResult, SessionState, SshSession};
 use crate::terminal::{TerminalEmulator, TerminalTheme};
 use eframe::egui;
 use std::sync::{Arc, Mutex};
 
+// 获取构建时信息
+fn get_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+fn get_commit_hash() -> String {
+    std::env!("GIT_COMMIT_ID").to_string()
+}
+
+fn get_git_branch() -> String {
+    std::env!("GIT_BRANCH").to_string()
+}
+
+fn get_build_time() -> String {
+    std::env!("BUILD_TIME").to_string()
+}
+
+fn get_build_user() -> String {
+    std::env!("BUILD_USER").to_string()
+}
+
+/// 关于对话框
+#[derive(Default)]
+pub struct AboutDialog {
+    pub show: bool,
+}
+
+impl AboutDialog {
+    pub fn new() -> Self {
+        Self { show: false }
+    }
+
+    pub fn show(&mut self) {
+        self.show = true;
+    }
+
+    pub fn ui(&mut self, ctx: &egui::Context, i18n: &I18nManager) {
+        if !self.show {
+            return;
+        }
+
+        egui::Window::new(i18n.get(I18nKey::AboutTitle))
+            .default_width(400.0)
+            .default_height(300.0)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    // 软件Logo或图标（这里用文本代替）
+                    ui.heading("TermLink");
+                    ui.add_space(10.0);
+
+                    // 软件标题
+                    ui.heading("TermLink");
+                    ui.label(i18n.get(I18nKey::Description));
+                    ui.add_space(15.0);
+
+                    // 版本信息
+                    ui.group(|ui| {
+                        ui.vertical(|ui| {
+                            ui.heading("Version Information");
+                            ui.separator();
+
+                            ui.horizontal(|ui| {
+                                ui.strong(i18n.get(I18nKey::Version));
+                                ui.label(get_version());
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.strong(i18n.get(I18nKey::CommitId));
+                                ui.label(get_commit_hash());
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.strong(i18n.get(I18nKey::GitBranch));
+                                ui.label(get_git_branch());
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.strong(i18n.get(I18nKey::BuildTime));
+                                ui.label(get_build_time());
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.strong(i18n.get(I18nKey::BuildUser));
+                                ui.label(get_build_user());
+                            });
+                        });
+                    });
+
+                    ui.add_space(15.0);
+
+                    // 软件描述
+                    ui.group(|ui| {
+                        ui.vertical(|ui| {
+                            ui.heading(i18n.get(I18nKey::Description));
+                            ui.separator();
+                            ui.label(i18n.get(I18nKey::SoftwareDescription));
+                            ui.add_space(5.0);
+                            ui.label(i18n.get(I18nKey::KeyFeatures));
+                            ui.horizontal(|ui| {
+                                ui.label(i18n.get(I18nKey::FeatureSSH));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(i18n.get(I18nKey::FeatureSFTP));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(i18n.get(I18nKey::FeatureTerminal));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(i18n.get(I18nKey::FeatureConnection));
+                            });
+                            ui.horizontal(|ui| {
+                                ui.label(i18n.get(I18nKey::FeatureLanguage));
+                            });
+                        });
+                    });
+
+                    ui.add_space(10.0);
+
+                    // 确定按钮
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                        if ui.button(i18n.get(I18nKey::Ok)).clicked() {
+                            self.show = false;
+                        }
+                    });
+                });
+            });
+    }
+}
+
+/// 设置对话框
+#[derive(Default)]
+pub struct SettingsDialog {
+    pub show: bool,
+    /// 本地设置副本，用于临时修改
+    pub temp_settings: AppSettings,
+    /// 本地语言设置
+    pub temp_language: Language,
+    /// 本地主题设置
+    pub temp_theme: String,
+}
+
+impl SettingsDialog {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn show(&mut self, current_settings: &AppSettings, current_language: &Language) {
+        self.temp_settings = current_settings.clone();
+        self.temp_language = current_language.clone();
+        self.temp_theme = current_settings.get_current_theme();
+        self.show = true;
+    }
+
+    pub fn ui<F>(&mut self, ctx: &egui::Context, i18n: &I18nManager, on_settings_changed: F)
+    where
+        F: FnOnce(AppSettings, Language),
+    {
+        if !self.show {
+            return;
+        }
+
+        egui::Window::new(i18n.get(I18nKey::SettingsTitle))
+            .default_width(500.0)
+            .default_height(400.0)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                ui.vertical(|ui| {
+                    // 语言设置
+                    ui.group(|ui| {
+                        ui.heading(i18n.get(I18nKey::Language));
+                        ui.separator();
+
+                        egui::ComboBox::from_label(i18n.get(I18nKey::Language))
+                            .selected_text(match self.temp_language {
+                                Language::Chinese => i18n.get(I18nKey::Chinese),
+                                Language::English => i18n.get(I18nKey::English),
+                            })
+                            .show_ui(ui, |ui| {
+                                if ui
+                                    .selectable_value(
+                                        &mut self.temp_language,
+                                        Language::Chinese,
+                                        i18n.get(I18nKey::Chinese),
+                                    )
+                                    .clicked()
+                                {
+                                    // 语言切换时立即更新界面
+                                }
+                                if ui
+                                    .selectable_value(
+                                        &mut self.temp_language,
+                                        Language::English,
+                                        i18n.get(I18nKey::English),
+                                    )
+                                    .clicked()
+                                {
+                                    // 语言切换时立即更新界面
+                                }
+                            });
+                    });
+
+                    ui.add_space(10.0);
+
+                    // 外观设置
+                    ui.group(|ui| {
+                        ui.heading(i18n.get(I18nKey::Appearance));
+                        ui.separator();
+
+                        egui::ComboBox::from_label(i18n.get(I18nKey::Theme))
+                            .selected_text(if self.temp_theme == "dark" {
+                                i18n.get(I18nKey::DarkTheme)
+                            } else {
+                                i18n.get(I18nKey::LightTheme)
+                            })
+                            .show_ui(ui, |ui| {
+                                if ui
+                                    .selectable_value(
+                                        &mut self.temp_theme,
+                                        "dark".to_string(),
+                                        i18n.get(I18nKey::DarkTheme),
+                                    )
+                                    .clicked()
+                                {
+                                    self.temp_settings.appearance.theme_mode = ThemeMode::Dark;
+                                    self.temp_settings.terminal.theme = "dark".to_string();
+                                }
+                                if ui
+                                    .selectable_value(
+                                        &mut self.temp_theme,
+                                        "light".to_string(),
+                                        i18n.get(I18nKey::LightTheme),
+                                    )
+                                    .clicked()
+                                {
+                                    self.temp_settings.appearance.theme_mode = ThemeMode::Light;
+                                    self.temp_settings.terminal.theme = "light".to_string();
+                                }
+                            });
+                    });
+
+                    ui.add_space(10.0);
+
+                    // 终端设置
+                    ui.group(|ui| {
+                        ui.heading(i18n.get(I18nKey::TerminalSettings));
+                        ui.separator();
+
+                        ui.horizontal(|ui| {
+                            ui.label(i18n.get(I18nKey::FontSize));
+                            ui.add(
+                                egui::DragValue::new(&mut self.temp_settings.terminal.font_size)
+                                    .speed(1.0)
+                                    .clamp_range(8.0..=32.0),
+                            );
+                        });
+
+                        ui.horizontal(|ui| {
+                            ui.label(i18n.get(I18nKey::FontFamily));
+                            ui.text_edit_singleline(&mut self.temp_settings.terminal.font_family);
+                        });
+
+                        ui.checkbox(
+                            &mut self.temp_settings.terminal.cursor_blink,
+                            i18n.get(I18nKey::CursorBlink),
+                        );
+                    });
+
+                    ui.add_space(20.0);
+                    ui.separator();
+
+                    // 按钮区域
+                    ui.horizontal(|ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                            if ui.button(i18n.get(I18nKey::Cancel)).clicked() {
+                                self.show = false;
+                            }
+
+                            if ui.button(i18n.get(I18nKey::Save)).clicked() {
+                                // 应用设置
+                                self.temp_settings.appearance.language =
+                                    self.temp_language.to_str().to_string();
+                                // 主题由theme_mode控制，不需要单独设置
+
+                                // 调用回调函数通知设置变更
+                                on_settings_changed(
+                                    self.temp_settings.clone(),
+                                    self.temp_language.clone(),
+                                );
+
+                                self.show = false;
+                            }
+                        });
+                    });
+                });
+            });
+    }
+}
+
 /// 主应用结构体
 pub struct App {
     /// 应用设置
     pub settings: AppSettings,
+    /// 国际化管理器
+    pub i18n: I18nManager,
     /// 连接管理器
     pub connection_manager: Arc<Mutex<ConnectionManager>>,
     /// 当前选中的会话名称
@@ -40,12 +344,17 @@ pub struct App {
     pub terminal_emulators: std::collections::HashMap<String, TerminalEmulator>,
     /// 上次读取时间
     pub last_read_time: Option<std::time::Instant>,
+    /// 关于对话框
+    pub about_dialog: AboutDialog,
+    /// 设置对话框
+    pub settings_dialog: SettingsDialog,
 }
 
 impl Default for App {
     fn default() -> Self {
         let mut app = Self {
             settings: AppSettings::default(),
+            i18n: I18nManager::new(),
             connection_manager: Arc::new(Mutex::new(ConnectionManager::new())),
             current_session: None,
             connection_form: ConnectionForm::default(),
@@ -60,10 +369,25 @@ impl Default for App {
             test_result: None,
             terminal_emulators: std::collections::HashMap::new(),
             last_read_time: None,
+            about_dialog: AboutDialog::new(),
+            settings_dialog: SettingsDialog::new(),
         };
 
         // 加载保存的应用状态
         app.load_app_state();
+
+        // 应用保存的语言设置
+        match app.settings.appearance.language.as_str() {
+            "en" => app.i18n.set_language(Language::English),
+            _ => app.i18n.set_language(Language::Chinese),
+        }
+
+        // 检测系统主题并更新设置
+        let system_theme = crate::utils::helpers::detect_system_theme();
+        app.settings.appearance.system_theme = system_theme;
+
+        // 应用当前主题设置
+        app.settings.terminal.theme = app.settings.get_current_theme();
         app
     }
 }
@@ -91,6 +415,19 @@ pub struct GroupForm {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // 应用主题色，确保手动切换主题能立即生效
+        let current_theme = self.settings.get_current_theme();
+        let is_currently_dark = ctx.style().visuals.dark_mode;
+        let should_be_dark = current_theme == "dark";
+
+        if is_currently_dark != should_be_dark {
+            if should_be_dark {
+                ctx.set_visuals(egui::Visuals::dark());
+            } else {
+                ctx.set_visuals(egui::Visuals::light());
+            }
+        }
+
         // 添加调试信息
         // println!("Update called at {:?}", std::time::Instant::now());
 
@@ -122,6 +459,213 @@ impl eframe::App for App {
             self.create_group_dialog(ctx);
         }
 
+        // 渲染对话框
+        self.about_dialog.ui(ctx, &self.i18n);
+
+        // 渲染设置对话框
+        if self.settings_dialog.show {
+            egui::Window::new(self.i18n.get(I18nKey::SettingsTitle))
+                .default_width(600.0)
+                .default_height(500.0)
+                .collapsible(false)
+                .resizable(true)
+                .show(ctx, |ui| {
+                    ui.vertical(|ui| {
+                        // 语言设置
+                        ui.group(|ui| {
+                            ui.vertical(|ui| {
+                                ui.heading(self.i18n.get(I18nKey::Language));
+                                ui.separator();
+
+                                ui.horizontal(|ui| {
+                                    ui.label(self.i18n.get(I18nKey::Language));
+                                    egui::ComboBox::from_id_source("language_selector")
+                                        .selected_text(
+                                            match self.settings.appearance.language.as_str() {
+                                                "zh-CN" => self.i18n.get(I18nKey::Chinese),
+                                                "en" => self.i18n.get(I18nKey::English),
+                                                _ => self.i18n.get(I18nKey::Chinese),
+                                            },
+                                        )
+                                        .show_ui(ui, |ui| {
+                                            if ui
+                                                .selectable_label(
+                                                    self.settings.appearance.language == "zh-CN",
+                                                    self.i18n.get(I18nKey::Chinese),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.settings.appearance.language =
+                                                    "zh-CN".to_string();
+                                                self.i18n
+                                                    .set_language(crate::i18n::Language::Chinese);
+                                            }
+                                            if ui
+                                                .selectable_label(
+                                                    self.settings.appearance.language == "en",
+                                                    self.i18n.get(I18nKey::English),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.settings.appearance.language =
+                                                    "en".to_string();
+                                                self.i18n
+                                                    .set_language(crate::i18n::Language::English);
+                                            }
+                                        });
+                                });
+                            });
+                        });
+
+                        ui.add_space(10.0);
+
+                        // 外观设置
+                        ui.group(|ui| {
+                            ui.vertical(|ui| {
+                                ui.heading(self.i18n.get(I18nKey::Appearance));
+                                ui.separator();
+
+                                ui.horizontal(|ui| {
+                                    ui.label(self.i18n.get(I18nKey::Theme));
+                                    egui::ComboBox::from_id_source("theme_selector")
+                                        .selected_text(
+                                            self.settings.get_theme_mode_display(&self.i18n),
+                                        )
+                                        .show_ui(ui, |ui| {
+                                            if ui
+                                                .selectable_label(
+                                                    matches!(
+                                                        self.settings.appearance.theme_mode,
+                                                        ThemeMode::Auto
+                                                    ),
+                                                    self.i18n.get(I18nKey::AutoTheme),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.settings.appearance.theme_mode =
+                                                    ThemeMode::Auto;
+                                                self.settings.terminal.theme =
+                                                    self.settings.get_current_theme();
+                                            }
+                                            if ui
+                                                .selectable_label(
+                                                    matches!(
+                                                        self.settings.appearance.theme_mode,
+                                                        ThemeMode::Dark
+                                                    ),
+                                                    self.i18n.get(I18nKey::DarkTheme),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.settings.appearance.theme_mode =
+                                                    ThemeMode::Dark;
+                                                self.settings.terminal.theme =
+                                                    self.settings.get_current_theme();
+                                            }
+                                            if ui
+                                                .selectable_label(
+                                                    matches!(
+                                                        self.settings.appearance.theme_mode,
+                                                        ThemeMode::Light
+                                                    ),
+                                                    self.i18n.get(I18nKey::LightTheme),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.settings.appearance.theme_mode =
+                                                    ThemeMode::Light;
+                                                self.settings.terminal.theme =
+                                                    self.settings.get_current_theme();
+                                            }
+                                        });
+                                });
+
+                                // 显示当前系统主题状态
+                                if matches!(self.settings.appearance.theme_mode, ThemeMode::Auto) {
+                                    ui.horizontal(|ui| {
+                                        ui.label(self.i18n.get(I18nKey::CurrentSystemTheme));
+                                        ui.label(
+                                            match self.settings.appearance.system_theme.as_str() {
+                                                "dark" => self.i18n.get(I18nKey::DarkThemeName),
+                                                "light" => self.i18n.get(I18nKey::LightThemeName),
+                                                _ => self.i18n.get(I18nKey::Unknown),
+                                            },
+                                        );
+                                    });
+                                }
+                            });
+                        });
+
+                        ui.add_space(10.0);
+
+                        // 终端设置
+                        ui.group(|ui| {
+                            ui.vertical(|ui| {
+                                ui.heading(self.i18n.get(I18nKey::TerminalSettings));
+                                ui.separator();
+
+                                ui.horizontal(|ui| {
+                                    ui.label(self.i18n.get(I18nKey::FontSize));
+                                    ui.add(
+                                        egui::DragValue::new(&mut self.settings.terminal.font_size)
+                                            .speed(1.0)
+                                            .clamp_range(8.0..=24.0)
+                                            .suffix("px"),
+                                    );
+                                });
+
+                                ui.horizontal(|ui| {
+                                    ui.label(self.i18n.get(I18nKey::FontFamily));
+                                    ui.text_edit_singleline(
+                                        &mut self.settings.terminal.font_family,
+                                    );
+                                });
+
+                                ui.checkbox(
+                                    &mut self.settings.terminal.cursor_blink,
+                                    self.i18n.get(I18nKey::CursorBlink),
+                                );
+                            });
+                        });
+
+                        ui.add_space(20.0);
+                        ui.separator();
+
+                        // 按钮区域
+                        ui.horizontal(|ui| {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                                if ui.button(self.i18n.get(I18nKey::Cancel)).clicked() {
+                                    self.settings_dialog.show = false;
+                                }
+
+                                if ui.button(self.i18n.get(I18nKey::Save)).clicked() {
+                                    // 保存设置
+                                    if let Err(e) = self.settings.save() {
+                                        eprintln!("保存设置失败: {}", e);
+                                    } else {
+                                        println!("设置已应用");
+                                        // 更新所有终端的主题
+                                        self.update_terminal_themes();
+                                    }
+                                }
+
+                                if ui.button(self.i18n.get(I18nKey::Ok)).clicked() {
+                                    // 保存设置并关闭
+                                    if let Err(e) = self.settings.save() {
+                                        eprintln!("保存设置失败: {}", e);
+                                    } else {
+                                        println!("设置已保存");
+                                        // 更新所有终端的主题
+                                        self.update_terminal_themes();
+                                    }
+                                    self.settings_dialog.show = false;
+                                }
+                            });
+                        });
+                    });
+                });
+        }
+
         // 请求下一帧更新，但要控制频率
         ctx.request_repaint_after(std::time::Duration::from_millis(50));
     }
@@ -131,28 +675,32 @@ impl App {
     /// 菜单栏
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::menu::bar(ui, |ui| {
-            ui.menu_button("文件", |ui| {
-                if ui.button("新建连接").clicked() {
+            ui.menu_button(self.i18n.get(I18nKey::MenuFile), |ui| {
+                if ui
+                    .button(self.i18n.get(I18nKey::MenuNewConnection))
+                    .clicked()
+                {
                     self.connection_form = ConnectionForm::default();
                     self.editing_connection_name = None;
                     self.show_connection_dialog = true;
                     ui.close_menu();
                 }
-                if ui.button("退出").clicked() {
+                if ui.button(self.i18n.get(I18nKey::MenuExit)).clicked() {
                     std::process::exit(0);
                 }
             });
 
-            ui.menu_button("编辑", |ui| {
-                if ui.button("设置").clicked() {
-                    // TODO: 打开设置对话框
+            ui.menu_button(self.i18n.get(I18nKey::MenuEdit), |ui| {
+                if ui.button(self.i18n.get(I18nKey::MenuSettings)).clicked() {
+                    self.settings_dialog
+                        .show(&self.settings, self.i18n.get_language());
                     ui.close_menu();
                 }
             });
 
-            ui.menu_button("帮助", |ui| {
-                if ui.button("关于").clicked() {
-                    // TODO: 显示关于对话框
+            ui.menu_button(self.i18n.get(I18nKey::MenuHelp), |ui| {
+                if ui.button(self.i18n.get(I18nKey::MenuAbout)).clicked() {
+                    self.about_dialog.show();
                     ui.close_menu();
                 }
             });
@@ -163,14 +711,22 @@ impl App {
     fn connections_panel(&mut self, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
-                ui.heading("连接管理");
+                ui.heading(self.i18n.get(I18nKey::ConnectionManagement));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("➕").on_hover_text("新建连接").clicked() {
+                    if ui
+                        .button("➕")
+                        .on_hover_text(self.i18n.get(I18nKey::NewConnection))
+                        .clicked()
+                    {
                         self.connection_form = ConnectionForm::default();
                         self.editing_connection_name = None;
                         self.show_connection_dialog = true;
                     }
-                    if ui.button("📁").on_hover_text("新建分组").clicked() {
+                    if ui
+                        .button("📁")
+                        .on_hover_text(self.i18n.get(I18nKey::NewGroup))
+                        .clicked()
+                    {
                         self.group_form = GroupForm::default();
                         self.editing_group_index = None;
                         self.show_create_group_dialog = true;
@@ -182,8 +738,16 @@ impl App {
 
             // 视图切换控制
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.show_group_view, false, "最近");
-                ui.selectable_value(&mut self.show_group_view, true, "分组");
+                ui.selectable_value(
+                    &mut self.show_group_view,
+                    false,
+                    self.i18n.get(I18nKey::Recent),
+                );
+                ui.selectable_value(
+                    &mut self.show_group_view,
+                    true,
+                    self.i18n.get(I18nKey::Groups),
+                );
             });
 
             ui.separator();
@@ -240,20 +804,32 @@ impl App {
                 }
 
                 response.context_menu(|ui| {
-                    if ui.button("🔄 连接").clicked() {
+                    if ui
+                        .button(&format!("🔄 {}", self.i18n.get(I18nKey::Connect)))
+                        .clicked()
+                    {
                         self.connect_from_history(config.clone());
                         ui.close_menu();
                     }
-                    if ui.button("✏️ 编辑").clicked() {
+                    if ui
+                        .button(&format!("✏️ {}", self.i18n.get(I18nKey::Edit)))
+                        .clicked()
+                    {
                         self.edit_connection(config.clone());
                         ui.close_menu();
                     }
                     ui.separator();
-                    if ui.button("🧹 从最近列表中移除").clicked() {
+                    if ui
+                        .button(&format!("🧹 {}", self.i18n.get(I18nKey::RemoveFromRecent)))
+                        .clicked()
+                    {
                         self.clear_connection_history(original_index);
                         ui.close_menu();
                     }
-                    if ui.button("🗑️ 彻底从磁盘删除").clicked() {
+                    if ui
+                        .button(&format!("🗑️ {}", self.i18n.get(I18nKey::DeletePermanently)))
+                        .clicked()
+                    {
                         self.delete_connection(original_index);
                         ui.close_menu();
                     }
@@ -293,23 +869,41 @@ impl App {
                             // 点击不再直接连接，仅供选择（或通过右键连接）
 
                             response.context_menu(|ui| {
-                                if ui.button("🔄 连接").clicked() {
+                                if ui
+                                    .button(&format!("🔄 {}", self.i18n.get(I18nKey::Connect)))
+                                    .clicked()
+                                {
                                     self.connect_from_group(group_index, base_conn_name);
                                     ui.close_menu();
                                 }
-                                if ui.button("✏️ 编辑").clicked() {
+                                if ui
+                                    .button(&format!("✏️ {}", self.i18n.get(I18nKey::Edit)))
+                                    .clicked()
+                                {
                                     self.edit_connection_from_group(group_index, base_conn_name);
                                     ui.close_menu();
                                 }
                                 ui.separator();
-                                if ui.button("🗑️ 移除分组").clicked() {
+                                if ui
+                                    .button(&format!(
+                                        "🗑️ {}",
+                                        self.i18n.get(I18nKey::RemoveFromGroup)
+                                    ))
+                                    .clicked()
+                                {
                                     self.remove_connection_from_group(group_index, base_conn_name);
                                     ui.close_menu();
                                 }
                                 if let Some(h_idx) =
                                     find_history_index(&self.connection_history, base_conn_name)
                                 {
-                                    if ui.button("🔥 彻底删除").clicked() {
+                                    if ui
+                                        .button(&format!(
+                                            "🔥 {}",
+                                            self.i18n.get(I18nKey::DeletePermanently)
+                                        ))
+                                        .clicked()
+                                    {
                                         self.delete_connection(h_idx);
                                         ui.close_menu();
                                     }
@@ -323,11 +917,17 @@ impl App {
                 })
                 .header_response
                 .context_menu(|ui| {
-                    if ui.button("✏️ 编辑分组").clicked() {
+                    if ui
+                        .button(&format!("✏️ {}", self.i18n.get(I18nKey::EditGroup)))
+                        .clicked()
+                    {
                         self.edit_group(group_index);
                         ui.close_menu();
                     }
-                    if ui.button("🗑️ 删除分组").clicked() {
+                    if ui
+                        .button(&format!("🗑️ {}", self.i18n.get(I18nKey::DeleteGroup)))
+                        .clicked()
+                    {
                         self.delete_group(group_index);
                         ui.close_menu();
                     }
@@ -352,7 +952,13 @@ impl App {
         // 确保当前会话有对应的终端仿真器
         if let Some(ref session_name) = self.current_session {
             if !self.terminal_emulators.contains_key(session_name) {
-                let theme = TerminalTheme::default();
+                // 根据当前设置的主题创建相应的TerminalTheme
+                let theme_style = if self.settings.get_current_theme() == "light" {
+                    crate::terminal::ThemeStyle::light()
+                } else {
+                    crate::terminal::ThemeStyle::dark()
+                };
+                let theme = TerminalTheme::new(theme_style, self.settings.terminal.font_size);
                 let emulator = TerminalEmulator::new(24, 80);
                 self.terminal_emulators
                     .insert(session_name.clone(), emulator);
@@ -384,7 +990,7 @@ impl App {
         } else {
             // 显示欢迎界面
             ui.centered_and_justified(|ui| {
-                ui.heading("欢迎使用 RSTerm");
+                ui.heading("欢迎使用 TermLink");
             });
         }
     }
@@ -426,8 +1032,15 @@ impl App {
                                     ui.memory_mut(|mem| mem.request_focus(response.id));
                                 }
 
+                                // 获取当前主题色
+                                let theme_style = if self.settings.get_current_theme() == "light" {
+                                    crate::terminal::ThemeStyle::light()
+                                } else {
+                                    crate::terminal::ThemeStyle::dark()
+                                };
+
                                 // 绘制背景
-                                ui.painter().rect_filled(rect, 0.0, egui::Color32::BLACK);
+                                ui.painter().rect_filled(rect, 0.0, theme_style.background);
 
                                 // 绘制焦点指示器
                                 if response.has_focus() {
@@ -443,8 +1056,8 @@ impl App {
                                     rect.min,
                                     egui::Align2::LEFT_TOP,
                                     &content,
-                                    egui::FontId::monospace(14.0),
-                                    egui::Color32::LIGHT_GRAY,
+                                    egui::FontId::monospace(self.settings.terminal.font_size),
+                                    theme_style.foreground,
                                 );
 
                                 // 如果获得焦点，则处理输入
@@ -452,12 +1065,13 @@ impl App {
                                     self.handle_terminal_input(ui);
 
                                     let last_line = content.lines().last().unwrap_or("");
-                                    let font_id = egui::FontId::monospace(14.0);
+                                    let font_id =
+                                        egui::FontId::monospace(self.settings.terminal.font_size);
                                     let galley = ui.fonts(|f| {
                                         f.layout_no_wrap(
                                             last_line.to_string(),
                                             font_id,
-                                            egui::Color32::WHITE,
+                                            theme_style.foreground,
                                         )
                                     });
                                     let line_y = (content.lines().count().max(1) - 1) as f32 * 16.0;
@@ -469,7 +1083,7 @@ impl App {
                                             egui::vec2(8.0, 16.0),
                                         ),
                                         0.0,
-                                        egui::Color32::from_rgb(150, 150, 150),
+                                        theme_style.cursor,
                                     );
                                 }
                             });
@@ -511,9 +1125,9 @@ impl App {
     /// 连接配置对话框
     fn connection_dialog(&mut self, ctx: &egui::Context) {
         let title = if self.editing_connection_name.is_some() {
-            "编辑连接"
+            self.i18n.get(I18nKey::EditConnection)
         } else {
-            "新建连接"
+            self.i18n.get(I18nKey::NewConnection)
         };
 
         egui::Window::new(title)
@@ -523,60 +1137,68 @@ impl App {
             .show(ctx, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.vertical(|ui| {
-                        ui.label("连接名称:");
+                        ui.label(self.i18n.get(I18nKey::ConnectionName));
                         ui.text_edit_singleline(&mut self.connection_form.name);
 
-                        ui.label("主机地址:");
+                        ui.label(self.i18n.get(I18nKey::HostAddress));
                         ui.text_edit_singleline(&mut self.connection_form.host);
 
-                        ui.label("端口:");
+                        ui.label(self.i18n.get(I18nKey::Port));
                         ui.add(egui::DragValue::new(&mut self.connection_form.port).speed(1));
 
-                        ui.label("用户名:");
+                        ui.label(self.i18n.get(I18nKey::Username));
                         ui.text_edit_singleline(&mut self.connection_form.username);
 
-                        ui.label("认证方式:");
+                        ui.label(self.i18n.get(I18nKey::AuthMethod));
                         ui.horizontal(|ui| {
-                            ui.radio_value(&mut self.connection_form.use_key_auth, false, "密码");
+                            ui.radio_value(
+                                &mut self.connection_form.use_key_auth,
+                                false,
+                                self.i18n.get(I18nKey::Password),
+                            );
                             ui.radio_value(
                                 &mut self.connection_form.use_key_auth,
                                 true,
-                                "密钥文件",
+                                self.i18n.get(I18nKey::PrivateKey),
                             );
                         });
 
                         if self.connection_form.use_key_auth {
-                            ui.label("私钥路径:");
+                            ui.label(self.i18n.get(I18nKey::PrivateKeyPath));
                             ui.horizontal(|ui| {
                                 ui.text_edit_singleline(&mut self.connection_form.private_key_path);
-                                if ui.button("浏览").clicked() {
+                                if ui.button(self.i18n.get(I18nKey::Browse)).clicked() {
                                     // TODO: 打开文件选择对话框
                                 }
                             });
                         } else {
-                            ui.label("密码:");
+                            ui.label(self.i18n.get(I18nKey::PasswordLabel));
                             ui.add(
                                 egui::TextEdit::singleline(&mut self.connection_form.password)
                                     .password(true),
                             );
                         }
 
-                        ui.checkbox(&mut self.connection_form.save_to_history, "保存到连接历史");
+                        ui.checkbox(
+                            &mut self.connection_form.save_to_history,
+                            self.i18n.get(I18nKey::SaveToHistory),
+                        );
 
                         // 分组选择
-                        ui.label("分组:");
-                        egui::ComboBox::from_label("选择分组")
+                        ui.label(self.i18n.get(I18nKey::Group));
+                        egui::ComboBox::from_label(self.i18n.get(I18nKey::SelectGroup))
                             .selected_text(
                                 self.connection_form
                                     .group
                                     .as_ref()
-                                    .unwrap_or(&"未分组".to_string()),
+                                    .map(|g| g.as_str())
+                                    .unwrap_or(self.i18n.get(I18nKey::NoGroup)),
                             )
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
                                     &mut self.connection_form.group,
                                     None,
-                                    "未分组",
+                                    self.i18n.get(I18nKey::NoGroup),
                                 );
                                 for group in &self.connection_groups {
                                     ui.selectable_value(
@@ -590,13 +1212,13 @@ impl App {
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            if ui.button("快速连接").clicked() {
+                            if ui.button(self.i18n.get(I18nKey::QuickConnect)).clicked() {
                                 self.quick_connect();
                             }
-                            if ui.button("测试连接").clicked() {
+                            if ui.button(self.i18n.get(I18nKey::TestConnection)).clicked() {
                                 self.test_connection();
                             }
-                            if ui.button("保存到分组").clicked() {
+                            if ui.button(self.i18n.get(I18nKey::SaveToGroup)).clicked() {
                                 self.save_to_group();
                             }
                         });
@@ -604,10 +1226,10 @@ impl App {
                         ui.separator();
 
                         ui.horizontal(|ui| {
-                            if ui.button("连接").clicked() {
+                            if ui.button(self.i18n.get(I18nKey::Connect)).clicked() {
                                 self.connect_to_host();
                             }
-                            if ui.button("取消").clicked() {
+                            if ui.button(self.i18n.get(I18nKey::Cancel)).clicked() {
                                 self.show_connection_dialog = false;
                                 self.editing_connection_name = None;
                                 // 重置表单
@@ -775,9 +1397,9 @@ impl App {
     /// 新建/编辑分组对话框
     fn create_group_dialog(&mut self, ctx: &egui::Context) {
         let title = if self.editing_group_index.is_some() {
-            "编辑分组"
+            self.i18n.get(I18nKey::EditGroup)
         } else {
-            "新建分组"
+            self.i18n.get(I18nKey::CreateGroup)
         };
 
         egui::Window::new(title)
@@ -786,10 +1408,10 @@ impl App {
             .collapsible(false)
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
-                    ui.label("分组名称:");
+                    ui.label(self.i18n.get(I18nKey::GroupName));
                     ui.text_edit_singleline(&mut self.group_form.name);
 
-                    ui.label("分组描述:");
+                    ui.label(self.i18n.get(I18nKey::GroupDescription));
                     ui.text_edit_multiline(&mut self.group_form.description);
 
                     ui.separator();
@@ -797,15 +1419,15 @@ impl App {
                     ui.horizontal(|ui| {
                         if ui
                             .button(if self.editing_group_index.is_some() {
-                                "保存"
+                                self.i18n.get(I18nKey::Save)
                             } else {
-                                "创建"
+                                self.i18n.get(I18nKey::Create)
                             })
                             .clicked()
                         {
                             self.save_group();
                         }
-                        if ui.button("取消").clicked() {
+                        if ui.button(self.i18n.get(I18nKey::Cancel)).clicked() {
                             self.show_create_group_dialog = false;
                             self.editing_group_index = None;
                             self.group_form = GroupForm::default(); // 重置表单
@@ -1257,13 +1879,27 @@ impl App {
         }
     }
 
+    /// 应用设置变更
+    fn apply_settings(&mut self, new_settings: AppSettings, new_language: Language) {
+        // 更新语言
+        self.i18n.set_language(new_language);
+
+        // 更新设置
+        self.settings = new_settings;
+
+        // 保存到文件
+        self.auto_save_state();
+
+        println!("设置已更新");
+    }
+
     /// 格式化会话状态显示
     fn format_session_state(&self, state: &SessionState) -> String {
         match state {
-            SessionState::Disconnected => "已断开".to_string(),
-            SessionState::Connecting => "连接中".to_string(),
-            SessionState::Connected => "已连接".to_string(),
-            SessionState::Error(e) => format!("连接错误: {}", e),
+            SessionState::Disconnected => self.i18n.get(I18nKey::Disconnected).to_string(),
+            SessionState::Connecting => self.i18n.get(I18nKey::Connecting).to_string(),
+            SessionState::Connected => self.i18n.get(I18nKey::Connected).to_string(),
+            SessionState::Error(e) => format!("{}: {}", self.i18n.get(I18nKey::ConnectionError), e),
         }
     }
 
@@ -1371,6 +2007,22 @@ impl App {
             egui::Key::ArrowLeft => Some(b"\x1b[D".to_vec()),
             egui::Key::ArrowRight => Some(b"\x1b[C".to_vec()),
             _ => None,
+        }
+    }
+
+    /// 更新所有终端的主题
+    fn update_terminal_themes(&mut self) {
+        let theme_style = if self.settings.get_current_theme() == "light" {
+            crate::terminal::ThemeStyle::light()
+        } else {
+            crate::terminal::ThemeStyle::dark()
+        };
+
+        // 更新所有已存在的终端仿真器主题
+        for (_, emulator) in self.terminal_emulators.iter_mut() {
+            // 这里需要更新终端渲染器的主题
+            // 由于TerminalRenderer不在公共API中，我们暂时只更新设置
+            println!("主题已更新为: {}", self.settings.get_current_theme());
         }
     }
 }

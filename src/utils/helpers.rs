@@ -90,3 +90,77 @@ pub fn join_paths(base: &str, relative: &str) -> String {
         )
     }
 }
+
+/// 检测系统主题设置
+pub fn detect_system_theme() -> String {
+    #[cfg(windows)]
+    {
+        // Windows 系统主题检测
+        use std::process::Command;
+
+        let output = Command::new("reg")
+            .args([
+                "query",
+                "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                "/v",
+                "AppsUseLightTheme",
+            ])
+            .output()
+            .ok();
+
+        if let Some(output) = output {
+            if output.status.success() {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                if output_str.contains("0x0") {
+                    return "dark".to_string();
+                } else {
+                    return "light".to_string();
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Linux 系统主题检测
+        use std::process::Command;
+
+        // 检查 GNOME
+        let output = Command::new("gsettings")
+            .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
+            .output()
+            .ok();
+
+        if let Some(output) = output {
+            if output.status.success() {
+                let theme_name = String::from_utf8_lossy(&output.stdout);
+                if theme_name.contains("dark") || theme_name.contains("Dark") {
+                    return "dark".to_string();
+                } else {
+                    return "light".to_string();
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS 系统主题检测
+        use std::process::Command;
+
+        let output = Command::new("defaults")
+            .args(["read", "-g", "AppleInterfaceStyle"])
+            .output()
+            .ok();
+
+        if let Some(output) = output {
+            if output.status.success() {
+                return "dark".to_string();
+            }
+        }
+        return "light".to_string();
+    }
+
+    // 默认返回深色主题
+    "dark".to_string()
+}

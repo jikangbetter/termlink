@@ -3,6 +3,7 @@ use eframe::egui;
 // 引入项目模块
 mod app;
 mod config;
+mod i18n;
 mod sftp;
 mod ssh;
 mod terminal;
@@ -84,7 +85,7 @@ fn main() -> Result<(), eframe::Error> {
     };
 
     eframe::run_native(
-        "TermLink - SSH终端客户端",
+        "TermLink",
         options,
         Box::new(|cc| {
             setup_chinese_font(&cc.egui_ctx);

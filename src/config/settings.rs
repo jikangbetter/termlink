@@ -60,10 +60,32 @@ pub struct TerminalSettings {
     pub cursor_blink: bool,
 }
 
+/// 主题模式
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ThemeMode {
+    /// 跟随系统主题
+    #[serde(rename = "auto")]
+    Auto,
+    /// 深色主题
+    #[serde(rename = "dark")]
+    Dark,
+    /// 浅色主题
+    #[serde(rename = "light")]
+    Light,
+}
+
+impl Default for ThemeMode {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
 /// 外观设置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppearanceSettings {
-    pub theme: String,
+    pub theme_mode: ThemeMode,
+    /// 本地强制的主题（不存储自动获取的状态）
+    pub system_theme: String,
     pub language: String,
 }
 
@@ -84,7 +106,8 @@ impl Default for AppSettings {
                 cursor_blink: true,
             },
             appearance: AppearanceSettings {
-                theme: "dark".to_string(),
+                theme_mode: ThemeMode::Auto,
+                system_theme: "dark".to_string(),
                 language: "zh-CN".to_string(),
             },
         }
@@ -109,14 +132,62 @@ impl AppSettings {
 
         if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)?;
-            let settings: AppSettings = serde_json::from_str(&content)?;
-            Ok(settings)
+
+            // 尝试解析新格式
+            if let Ok(settings) = serde_json::from_str::<AppSettings>(&content) {
+                Ok(settings)
+            } else {
+                // 如果失败，尝试解析旧格式并迁移
+                Self::migrate_from_old_format(&content)
+            }
         } else {
             // 返回默认设置
             let settings = AppSettings::default();
             settings.save()?;
             Ok(settings)
         }
+    }
+
+    /// 从旧格式迁移配置
+    fn migrate_from_old_format(content: &str) -> Result<Self> {
+        // 定义旧格式结构
+        #[derive(Deserialize)]
+        struct OldAppearanceSettings {
+            theme: String,
+            language: String,
+        }
+
+        #[derive(Deserialize)]
+        struct OldAppSettings {
+            window: WindowSettings,
+            connections: Vec<ConnectionConfig>,
+            groups: Vec<ConnectionGroup>,
+            terminal: TerminalSettings,
+            appearance: OldAppearanceSettings,
+        }
+
+        let old_settings: OldAppSettings = serde_json::from_str(content)?;
+
+        // 转换为新格式
+        let new_settings = AppSettings {
+            window: old_settings.window,
+            connections: old_settings.connections,
+            groups: old_settings.groups,
+            terminal: old_settings.terminal,
+            appearance: AppearanceSettings {
+                theme_mode: match old_settings.appearance.theme.as_str() {
+                    "dark" => ThemeMode::Dark,
+                    "light" => ThemeMode::Light,
+                    _ => ThemeMode::Auto,
+                },
+                system_theme: "dark".to_string(), // 默认值
+                language: old_settings.appearance.language,
+            },
+        };
+
+        // 保存新格式
+        new_settings.save()?;
+        Ok(new_settings)
     }
 
     /// 保存设置
@@ -142,5 +213,23 @@ impl AppSettings {
         let initial_len = self.connections.len();
         self.connections.retain(|c| c.name != name);
         self.connections.len() < initial_len
+    }
+
+    /// 获取当前应使用的主题
+    pub fn get_current_theme(&self) -> String {
+        match self.appearance.theme_mode {
+            ThemeMode::Auto => self.appearance.system_theme.clone(),
+            ThemeMode::Dark => "dark".to_string(),
+            ThemeMode::Light => "light".to_string(),
+        }
+    }
+
+    /// 获取主题模式的显示名称（需要传入i18n管理器）
+    pub fn get_theme_mode_display(&self, i18n: &crate::i18n::I18nManager) -> String {
+        match self.appearance.theme_mode {
+            ThemeMode::Auto => i18n.get(crate::i18n::I18nKey::AutoTheme).to_string(),
+            ThemeMode::Dark => i18n.get(crate::i18n::I18nKey::DarkTheme).to_string(),
+            ThemeMode::Light => i18n.get(crate::i18n::I18nKey::LightTheme).to_string(),
+        }
     }
 }
