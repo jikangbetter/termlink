@@ -22,7 +22,7 @@ pub fn setup_chinese_font(ctx: &egui::Context) {
         if let Ok(font_data) = std::fs::read(font_path) {
             fonts.font_data.insert(
                 "chinese_font".to_owned(),
-                egui::FontData::from_owned(font_data),
+                std::sync::Arc::new(egui::FontData::from_owned(font_data)),
             );
             true
         } else {
@@ -65,7 +65,7 @@ fn try_system_chinese_fonts(fonts: &mut egui::FontDefinitions) -> bool {
         if let Ok(font_data) = std::fs::read(font_path) {
             fonts.font_data.insert(
                 "chinese_font".to_owned(),
-                egui::FontData::from_owned(font_data),
+                std::sync::Arc::new(egui::FontData::from_owned(font_data)),
             );
             return true;
         }
@@ -89,7 +89,7 @@ fn main() -> Result<(), eframe::Error> {
         options,
         Box::new(|cc| {
             setup_chinese_font(&cc.egui_ctx);
-            Box::new(App::default())
+            Ok(Box::new(App::default()))
         }),
     )
 }

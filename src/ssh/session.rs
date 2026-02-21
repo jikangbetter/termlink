@@ -134,18 +134,27 @@ impl SshSession {
 
             // 在非阻塞模式下 manual 循环写，避免 write_all 直接报错
             let mut total_written = 0;
-            while total_written < data.len() {
+            let mut retries = 0;
+
+            while total_written < data.len() && retries < 100 {
                 match channel.write(&data[total_written..]) {
                     Ok(n) if n > 0 => {
                         total_written += n;
+                        retries = 0;
                     }
                     Ok(_) => return Err(anyhow::anyhow!("写入0字节")),
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        // 缓冲区满了
+                        // 如果写入失败且数据很少（通常是快捷键），尝试重试几次
+                        if data.len() < 10 {
+                            std::thread::sleep(std::time::Duration::from_millis(1));
+                            retries += 1;
+                            continue;
+                        }
+
                         if total_written > 0 {
                             break;
                         } else {
-                            // 一个都没写进去，可以稍后重试
+                            // 让 UI 继续运行，下次重试
                             return Ok(());
                         }
                     }
@@ -165,5 +174,16 @@ impl SshSession {
         // 如果通道正在进行某些内部操作，且为非阻塞模式，这里可以总是返回 true，
         // 由 read_terminal 的已修改逻辑来处理 WouldBlock。
         channel_guard.is_some()
+    }
+
+    /// 调整终端窗口大小
+    pub fn resize_terminal(&self, rows: u32, cols: u32) -> anyhow::Result<()> {
+        let mut channel_guard = self.channel.lock().unwrap();
+        if let Some(ref mut channel) = *channel_guard {
+            channel.request_pty_size(cols, rows, Some(0), Some(0))?;
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("No terminal channel"))
+        }
     }
 }

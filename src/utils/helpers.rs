@@ -1,5 +1,6 @@
 //! 工具函数集合
 //! 提供各种辅助功能
+#![allow(unused)]
 
 use std::path::Path;
 
@@ -13,7 +14,7 @@ pub fn validate_host(host: &str) -> bool {
 
 /// 验证端口号
 pub fn validate_port(port: u16) -> bool {
-    port > 0 && port <= 65535
+    port > 0
 }
 
 /// 验证用户名
@@ -88,6 +89,26 @@ pub fn join_paths(base: &str, relative: &str) -> String {
             base.trim_end_matches('/'),
             relative.trim_start_matches('/')
         )
+    }
+}
+
+/// 获取字符在终端中的显示宽度 (CJK)
+pub fn get_char_width(c: char) -> usize {
+    if (c >= '\u{1100}' && c <= '\u{115f}') || // 谚文
+       (c >= '\u{2e80}' && c <= '\u{9fff}') || // 常用中日韩汉字
+       (c >= '\u{ac00}' && c <= '\u{d7a3}') || // 韩文音节
+       (c >= '\u{f900}' && c <= '\u{faff}') || // CJK 兼容汉字
+       (c >= '\u{fe10}' && c <= '\u{fe19}') || // 垂直形式
+       (c >= '\u{fe30}' && c <= '\u{fe6f}') || // CJK 兼容性形式
+       (c >= '\u{ff00}' && c <= '\u{ff60}') || // 全角 ASCII 变体
+       (c >= '\u{ffe0}' && c <= '\u{ffe6}') || // 全角标点
+       (c >= '\u{20000}' && c <= '\u{2fffd}') || // 扩展 B-F
+       (c >= '\u{30000}' && c <= '\u{3fffd}')
+    // 扩展 G
+    {
+        2
+    } else {
+        1
     }
 }
 

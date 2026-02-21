@@ -102,6 +102,7 @@ pub enum I18nKey {
     // 关于对话框
     AboutTitle,
     SoftwareName,
+    VersionInfo,
     Version,
     CommitId,
     GitBranch,
@@ -239,6 +240,7 @@ impl I18nManager {
 
         zh_translations.insert(I18nKey::AboutTitle, "关于 TermLink");
         zh_translations.insert(I18nKey::SoftwareName, "软件名称");
+        zh_translations.insert(I18nKey::VersionInfo, "版本信息");
         zh_translations.insert(I18nKey::Version, "版本");
         zh_translations.insert(I18nKey::CommitId, "提交ID");
         zh_translations.insert(I18nKey::GitBranch, "Git分支");
@@ -352,6 +354,7 @@ impl I18nManager {
         en_translations.insert(I18nKey::AboutTitle, "About TermLink");
         en_translations.insert(I18nKey::SoftwareName, "Software Name");
         en_translations.insert(I18nKey::Version, "Version");
+        en_translations.insert(I18nKey::VersionInfo, "Version Info");
         en_translations.insert(I18nKey::CommitId, "Commit ID");
         en_translations.insert(I18nKey::GitBranch, "Git Branch");
         en_translations.insert(I18nKey::BuildTime, "Build Time");

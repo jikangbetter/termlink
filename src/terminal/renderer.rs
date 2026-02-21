@@ -1,101 +1,9 @@
 //! 终端渲染器
 //! 负责在egui中渲染终端内容
 
+use crate::terminal::buffer::TerminalBuffer;
 use crate::terminal::theme::TerminalTheme;
 use eframe::egui;
-
-/// 终端字符单元
-#[derive(Debug, Clone)]
-pub struct TerminalCell {
-    pub character: char,
-    pub fg_color: egui::Color32,
-    pub bg_color: egui::Color32,
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-}
-
-impl Default for TerminalCell {
-    fn default() -> Self {
-        Self {
-            character: ' ',
-            fg_color: egui::Color32::WHITE,
-            bg_color: egui::Color32::BLACK,
-            bold: false,
-            italic: false,
-            underline: false,
-        }
-    }
-}
-
-/// 终端缓冲区
-#[derive(Debug, Clone)]
-pub struct TerminalBuffer {
-    pub rows: usize,
-    pub cols: usize,
-    pub cells: Vec<TerminalCell>,
-    pub cursor_row: usize,
-    pub cursor_col: usize,
-}
-
-impl TerminalBuffer {
-    pub fn new(rows: usize, cols: usize) -> Self {
-        let cell_count = rows * cols;
-        let cells = vec![TerminalCell::default(); cell_count];
-
-        Self {
-            rows,
-            cols,
-            cells,
-            cursor_row: 0,
-            cursor_col: 0,
-        }
-    }
-
-    pub fn resize(&mut self, new_rows: usize, new_cols: usize) {
-        let new_cell_count = new_rows * new_cols;
-        self.cells.resize(new_cell_count, TerminalCell::default());
-        self.rows = new_rows;
-        self.cols = new_cols;
-
-        // 确保光标在有效范围内
-        self.cursor_row = self.cursor_row.min(new_rows - 1);
-        self.cursor_col = self.cursor_col.min(new_cols - 1);
-    }
-
-    pub fn get_cell_index(&self, row: usize, col: usize) -> Option<usize> {
-        if row < self.rows && col < self.cols {
-            Some(row * self.cols + col)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_cell_mut(&mut self, row: usize, col: usize) -> Option<&mut TerminalCell> {
-        self.get_cell_index(row, col)
-            .and_then(|index| self.cells.get_mut(index))
-    }
-
-    pub fn get_cell(&self, row: usize, col: usize) -> Option<&TerminalCell> {
-        self.get_cell_index(row, col)
-            .and_then(|index| self.cells.get(index))
-    }
-
-    pub fn set_cursor(&mut self, row: usize, col: usize) {
-        if row < self.rows && col < self.cols {
-            self.cursor_row = row;
-            self.cursor_col = col;
-        }
-    }
-
-    pub fn clear(&mut self) {
-        for cell in &mut self.cells {
-            *cell = TerminalCell::default();
-        }
-        self.cursor_row = 0;
-        self.cursor_col = 0;
-    }
-}
 
 /// 终端渲染器
 pub struct TerminalRenderer {
@@ -121,100 +29,194 @@ impl TerminalRenderer {
     }
 
     pub fn render(&mut self, ui: &mut egui::Ui) -> egui::Response {
-        let available_size = ui.available_size();
         let char_size = self.measure_char_size(ui);
 
-        let actual_rows = (available_size.y / (char_size.y * self.theme.line_height)) as usize;
-        let actual_cols = (available_size.x / char_size.x) as usize;
-
-        // 调整缓冲区大小
-        if actual_rows != self.buffer.rows || actual_cols != self.buffer.cols {
-            self.resize(actual_rows.max(1), actual_cols.max(1));
-        }
-
-        // 计算实际渲染区域
-        let render_width = actual_cols as f32 * char_size.x;
-        let render_height = actual_rows as f32 * char_size.y * self.theme.line_height;
+        // 计算总高度（包括历史记录和当前可见行）
+        let total_rows = self.buffer.history.len() + self.buffer.rows;
+        let total_height = total_rows as f32 * char_size.y * self.theme.line_height;
+        let render_width = self.buffer.cols as f32 * char_size.x;
 
         let (rect, response) = ui.allocate_exact_size(
-            egui::vec2(render_width, render_height),
+            egui::vec2(render_width, total_height),
             egui::Sense::click_and_drag(),
         );
 
         if ui.is_rect_visible(rect) {
-            let mut painter = ui.painter_at(rect);
+            let painter = ui.painter_at(rect);
 
-            // 绘制背景
+            // 绘制整个背景
             painter.rect_filled(rect, 0.0, self.theme.style.background);
 
-            // 绘制字符
-            for row in 0..self.buffer.rows {
-                for col in 0..self.buffer.cols {
-                    if let Some(cell) = self.buffer.get_cell(row, col) {
-                        let char_pos = egui::pos2(
-                            rect.min.x + col as f32 * char_size.x,
-                            rect.min.y + row as f32 * char_size.y * self.theme.line_height,
-                        );
+            // 1. 绘制历史记录
+            for (h_row, line) in self.buffer.history.iter().enumerate() {
+                let row_pos_y = rect.min.y + h_row as f32 * char_size.y * self.theme.line_height;
 
-                        // 绘制背景色
-                        if cell.bg_color != self.theme.style.background {
+                // 检查行是否可见
+                let row_rect = egui::Rect::from_min_size(
+                    egui::pos2(rect.min.x, row_pos_y),
+                    egui::vec2(render_width, char_size.y * self.theme.line_height),
+                );
+
+                if !ui.is_rect_visible(row_rect) {
+                    continue;
+                }
+
+                for col in 0..self.buffer.cols {
+                    if let Some(cell) = line.get(col) {
+                        if cell.is_continuation {
+                            continue;
+                        }
+
+                        if cell.character == ' ' && cell.bg_color == egui::Color32::TRANSPARENT {
+                            continue;
+                        }
+
+                        let width = crate::utils::helpers::get_char_width(cell.character);
+                        let char_pos = egui::pos2(rect.min.x + col as f32 * char_size.x, row_pos_y);
+
+                        // 绘制背景
+                        if cell.bg_color != egui::Color32::TRANSPARENT
+                            && cell.bg_color != self.theme.style.background
+                        {
                             let bg_rect = egui::Rect::from_min_size(
                                 char_pos,
-                                egui::vec2(char_size.x, char_size.y * self.theme.line_height),
+                                egui::vec2(
+                                    char_size.x * width as f32,
+                                    char_size.y * self.theme.line_height,
+                                ),
                             );
                             painter.rect_filled(bg_rect, 0.0, cell.bg_color);
                         }
 
-                        // 绘制字符
-                        let text_color = if cell.fg_color == egui::Color32::WHITE
-                            && self.theme.style.foreground != egui::Color32::WHITE
-                        {
-                            self.theme.style.foreground
-                        } else {
-                            cell.fg_color
-                        };
-
-                        painter.text(
-                            char_pos,
-                            egui::Align2::LEFT_TOP,
-                            cell.character.to_string(),
-                            self.font_id.clone(),
-                            text_color,
-                        );
+                        // 绘制文字
+                        if cell.character != ' ' {
+                            painter.text(
+                                char_pos,
+                                egui::Align2::LEFT_TOP,
+                                cell.character.to_string(),
+                                self.font_id.clone(),
+                                cell.fg_color,
+                            );
+                        }
                     }
                 }
             }
 
-            // 绘制光标
-            self.render_cursor(&mut painter, rect, char_size);
+            // 2. 绘制当前可视屏幕
+            let screen_start_y = rect.min.y
+                + self.buffer.history.len() as f32 * char_size.y * self.theme.line_height;
+            for row in 0..self.buffer.rows {
+                let row_pos_y = screen_start_y + row as f32 * char_size.y * self.theme.line_height;
+
+                let row_rect = egui::Rect::from_min_size(
+                    egui::pos2(rect.min.x, row_pos_y),
+                    egui::vec2(render_width, char_size.y * self.theme.line_height),
+                );
+
+                if !ui.is_rect_visible(row_rect) {
+                    continue;
+                }
+
+                for col in 0..self.buffer.cols {
+                    if let Some(cell) = self.buffer.get_cell(row, col) {
+                        if cell.is_continuation {
+                            continue;
+                        }
+
+                        if cell.character == ' ' && cell.bg_color == egui::Color32::TRANSPARENT {
+                            continue;
+                        }
+
+                        let width = crate::utils::helpers::get_char_width(cell.character);
+                        let char_pos = egui::pos2(rect.min.x + col as f32 * char_size.x, row_pos_y);
+
+                        if cell.bg_color != egui::Color32::TRANSPARENT
+                            && cell.bg_color != self.theme.style.background
+                        {
+                            let bg_rect = egui::Rect::from_min_size(
+                                char_pos,
+                                egui::vec2(
+                                    char_size.x * width as f32,
+                                    char_size.y * self.theme.line_height,
+                                ),
+                            );
+                            painter.rect_filled(bg_rect, 0.0, cell.bg_color);
+                        }
+
+                        if cell.character != ' ' {
+                            painter.text(
+                                char_pos,
+                                egui::Align2::LEFT_TOP,
+                                cell.character.to_string(),
+                                self.font_id.clone(),
+                                cell.fg_color,
+                            );
+                        }
+                    }
+                }
+            }
+
+            // 绘制光标 (在其相对于当前屏幕的位置绘制)
+            let cursor_screen_pos = egui::pos2(rect.min.x, screen_start_y);
+            self.render_cursor(&painter, cursor_screen_pos, char_size);
         }
 
         response
     }
 
     fn measure_char_size(&self, ui: &mut egui::Ui) -> egui::Vec2 {
-        let layout_job = egui::text::LayoutJob::single_section(
-            "W".to_string(),
-            egui::TextFormat::simple(self.font_id.clone(), egui::Color32::WHITE),
-        );
-        let galley = ui.fonts(|f| f.layout_job(layout_job));
-        egui::vec2(galley.size().x, galley.size().y)
+        // 使用更精确的测量方式，通过绘制一个测试字符来获取尺寸
+        let font_id = self.font_id.clone();
+        let galley = ui
+            .painter()
+            .layout_no_wrap("W".to_string(), font_id, egui::Color32::WHITE);
+
+        let char_width = galley.size().x;
+        let row_height = galley.size().y;
+
+        egui::vec2(char_width, row_height)
     }
 
-    fn render_cursor(&self, painter: &mut egui::Painter, rect: egui::Rect, char_size: egui::Vec2) {
+    fn render_cursor(
+        &self,
+        painter: &egui::Painter,
+        screen_origin: egui::Pos2,
+        char_size: egui::Vec2,
+    ) {
         if self.buffer.cursor_row < self.buffer.rows && self.buffer.cursor_col < self.buffer.cols {
+            // 获取当前光标位置字符的宽度
+            let width = if let Some(cell) = self
+                .buffer
+                .get_cell(self.buffer.cursor_row, self.buffer.cursor_col)
+            {
+                if cell.is_continuation {
+                    1
+                } else {
+                    crate::utils::helpers::get_char_width(cell.character)
+                }
+            } else {
+                1
+            };
+
             let cursor_pos = egui::pos2(
-                rect.min.x + self.buffer.cursor_col as f32 * char_size.x,
-                rect.min.y + self.buffer.cursor_row as f32 * char_size.y * self.theme.line_height,
+                screen_origin.x + self.buffer.cursor_col as f32 * char_size.x,
+                screen_origin.y
+                    + self.buffer.cursor_row as f32 * char_size.y * self.theme.line_height,
             );
 
             let cursor_rect = egui::Rect::from_min_size(
                 cursor_pos,
-                egui::vec2(char_size.x, char_size.y * self.theme.line_height),
+                egui::vec2(
+                    char_size.x * width as f32,
+                    char_size.y * self.theme.line_height,
+                ),
             );
 
-            // 简单的块状光标
-            painter.rect_filled(cursor_rect, 0.0, self.theme.style.cursor);
+            painter.rect_filled(
+                cursor_rect,
+                0.0,
+                self.theme.style.cursor.linear_multiply(0.7),
+            );
         }
     }
 

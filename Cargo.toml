@@ -5,8 +5,8 @@ edition = "2024"
 
 [dependencies]
 # GUI框架
-egui = "0.27"
-eframe = { version = "0.27", features = ["persistence"] }
+egui = "0.33.3"
+eframe = { version = "0.33.3", features = ["persistence"] }
 
 # SSH客户端
 ssh2 = "0.9"

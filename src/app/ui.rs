@@ -6,7 +6,7 @@ use crate::config::settings::ThemeMode;
 use crate::config::{AppSettings, ConnectionConfig};
 use crate::i18n::{I18nKey, I18nManager, Language};
 use crate::ssh::{ConnectionManager, ConnectionTestResult, SessionState, SshSession};
-use crate::terminal::{TerminalEmulator, TerminalTheme};
+use crate::terminal::TerminalEmulator;
 use eframe::egui;
 use std::sync::{Arc, Mutex};
 
@@ -59,8 +59,6 @@ impl AboutDialog {
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     // 软件Logo或图标（这里用文本代替）
-                    ui.heading("TermLink");
-                    ui.add_space(10.0);
 
                     // 软件标题
                     ui.heading("TermLink");
@@ -70,7 +68,7 @@ impl AboutDialog {
                     // 版本信息
                     ui.group(|ui| {
                         ui.vertical(|ui| {
-                            ui.heading("Version Information");
+                            ui.heading(i18n.get(I18nKey::VersionInfo));
                             ui.separator();
 
                             ui.horizontal(|ui| {
@@ -415,6 +413,18 @@ pub struct GroupForm {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // 如果终端有焦点，禁用 egui 的默认复制/粘贴/剪切快捷键
+        // 这样 Ctrl+C/X/V 才能传递到终端
+        if self.current_session.is_some() {
+            ctx.input_mut(|i| {
+                // 消费掉这些快捷键，防止 egui 默认处理
+                i.consume_key(egui::Modifiers::CTRL, egui::Key::C);
+                i.consume_key(egui::Modifiers::CTRL, egui::Key::X);
+                i.consume_key(egui::Modifiers::CTRL, egui::Key::V);
+                i.consume_key(egui::Modifiers::CTRL, egui::Key::A);
+            });
+        }
+
         // 应用主题色，确保手动切换主题能立即生效
         let current_theme = self.settings.get_current_theme();
         let is_currently_dark = ctx.style().visuals.dark_mode;
@@ -952,14 +962,22 @@ impl App {
         // 确保当前会话有对应的终端仿真器
         if let Some(ref session_name) = self.current_session {
             if !self.terminal_emulators.contains_key(session_name) {
-                // 根据当前设置的主题创建相应的TerminalTheme
-                let theme_style = if self.settings.get_current_theme() == "light" {
-                    crate::terminal::ThemeStyle::light()
-                } else {
-                    crate::terminal::ThemeStyle::dark()
-                };
-                let theme = TerminalTheme::new(theme_style, self.settings.terminal.font_size);
-                let emulator = TerminalEmulator::new(24, 80);
+                let mut emulator = TerminalEmulator::new(24, 80);
+
+                // 设置终端事件回调
+                let session_name_clone = session_name.clone();
+                let manager_clone = self.connection_manager.clone();
+                emulator.set_event_callback(move |event| {
+                    if let crate::terminal::TerminalEvent::Resize { rows, cols } = event {
+                        let manager = manager_clone.lock().unwrap();
+                        if let Some(session) = manager.get_session(&session_name_clone) {
+                            if let Err(e) = session.resize_terminal(rows as u32, cols as u32) {
+                                eprintln!("调整终端大小失败: {}", e);
+                            }
+                        }
+                    }
+                });
+
                 self.terminal_emulators
                     .insert(session_name.clone(), emulator);
             }
@@ -1011,80 +1029,92 @@ impl App {
         // 显示终端
         egui::ScrollArea::vertical()
             .auto_shrink([false; 2])
+            .stick_to_bottom(true)
             .show(ui, |ui| {
                 // 获取当前会话对应的终端仿真器
                 if let Some(ref session_name) = self.current_session {
                     if let Some(ref mut emulator) = self.terminal_emulators.get_mut(session_name) {
-                        let content = emulator.get_buffer();
+                        // 更新仿真器中的主题信息
+                        let theme_style = if self.settings.get_current_theme() == "light" {
+                            crate::terminal::ThemeStyle::light()
+                        } else {
+                            crate::terminal::ThemeStyle::dark()
+                        };
+                        let theme = crate::terminal::TerminalTheme::new(
+                            theme_style,
+                            self.settings.terminal.font_size,
+                        );
+                        emulator.update_theme(theme.clone());
+
+                        // 在渲染前计算并更新终端仿真器的尺寸，确保 PTY 大小与 UI 匹配
+                        let font_id = egui::FontId::monospace(self.settings.terminal.font_size);
+                        let galley = ui.painter().layout_no_wrap(
+                            "W".to_string(),
+                            font_id.clone(),
+                            egui::Color32::WHITE,
+                        );
+                        let char_size = egui::vec2(galley.size().x, galley.size().y);
+
+                        let available_width = ui.available_width().max(100.0);
+                        let viewport_height = ui.clip_rect().height().max(100.0);
+
+                        let actual_cols = ((available_width - 8.0) / char_size.x).floor() as usize;
+                        let actual_rows =
+                            ((viewport_height - 4.0) / (char_size.y * 1.2)).floor() as usize;
+
+                        // 只有在已连接的情况下才触发 PTY 大小变化通知
+                        let is_connected = matches!(state, SessionState::Connected);
+
+                        // 如果尺寸发生了变化，则通知后端 PTY 调整
+                        let current_buffer = emulator.buffer();
+                        if is_connected
+                            && (actual_cols != current_buffer.cols
+                                || actual_rows != current_buffer.rows)
+                        {
+                            emulator.resize(actual_rows.max(1), actual_cols.max(1));
+                        }
+
+                        let buffer = emulator.buffer();
+                        let mut renderer = crate::terminal::TerminalRenderer {
+                            buffer,
+                            theme,
+                            font_id: egui::FontId::monospace(self.settings.terminal.font_size),
+                        };
 
                         egui::Frame::canvas(ui.style())
-                            .inner_margin(8.0)
+                            .inner_margin(0.0)
                             .show(ui, |ui| {
-                                let available_width = ui.available_width();
-                                let text_height = content.lines().count().max(1) as f32 * 16.0;
-                                let desired_size =
-                                    egui::vec2(available_width, text_height.max(300.0));
-
-                                let (rect, response) =
-                                    ui.allocate_at_least(desired_size, egui::Sense::click());
+                                let response = renderer.render(ui);
 
                                 if response.clicked() {
                                     ui.memory_mut(|mem| mem.request_focus(response.id));
                                 }
 
-                                // 获取当前主题色
-                                let theme_style = if self.settings.get_current_theme() == "light" {
-                                    crate::terminal::ThemeStyle::light()
-                                } else {
-                                    crate::terminal::ThemeStyle::dark()
-                                };
-
-                                // 绘制背景
-                                ui.painter().rect_filled(rect, 0.0, theme_style.background);
-
-                                // 绘制焦点指示器
+                                // 如果获得焦点，则处理输入和IME
                                 if response.has_focus() {
-                                    ui.painter().rect_stroke(
-                                        rect,
-                                        0.0,
-                                        (1.0, egui::Color32::from_rgb(0, 150, 255)),
-                                    );
-                                }
-
-                                // 绘制内容
-                                ui.painter().text(
-                                    rect.min,
-                                    egui::Align2::LEFT_TOP,
-                                    &content,
-                                    egui::FontId::monospace(self.settings.terminal.font_size),
-                                    theme_style.foreground,
-                                );
-
-                                // 如果获得焦点，则处理输入
-                                if response.has_focus() {
-                                    self.handle_terminal_input(ui);
-
-                                    let last_line = content.lines().last().unwrap_or("");
-                                    let font_id =
-                                        egui::FontId::monospace(self.settings.terminal.font_size);
-                                    let galley = ui.fonts(|f| {
-                                        f.layout_no_wrap(
-                                            last_line.to_string(),
-                                            font_id,
-                                            theme_style.foreground,
-                                        )
+                                    // 请求IME（输入法）支持，特别是中文输入
+                                    ui.ctx().output_mut(|o| {
+                                        // egui 0.33 IMEOutput 需要同时设置 rect 和 cursor_rect
+                                        o.ime = Some(egui::output::IMEOutput {
+                                            rect: response.rect,
+                                            cursor_rect: response.rect,
+                                        });
                                     });
-                                    let line_y = (content.lines().count().max(1) - 1) as f32 * 16.0;
-                                    let cursor_pos = rect.min + egui::vec2(galley.size().x, line_y);
-
-                                    ui.painter().rect_filled(
-                                        egui::Rect::from_min_size(
-                                            cursor_pos,
-                                            egui::vec2(8.0, 16.0),
-                                        ),
-                                        0.0,
-                                        theme_style.cursor,
-                                    );
+                                    // 告诉egui不要处理这些按键，让它们传递给我们
+                                    ui.memory_mut(|mem| {
+                                        mem.set_focus_lock_filter(
+                                            response.id,
+                                            egui::EventFilter {
+                                                tab: true,
+                                                horizontal_arrows: true,
+                                                vertical_arrows: true,
+                                                escape: true,
+                                            },
+                                        );
+                                        // 注意：egui::EventFilter 不包含对 Ctrl 快捷键的过滤选项
+                                        // 因此我们需要在 handle_terminal_input 中通过 consume_key 来处理
+                                    });
+                                    self.handle_terminal_input(ui);
                                 }
                             });
                     }
@@ -1096,28 +1126,199 @@ impl App {
     fn handle_terminal_input(&mut self, ui: &mut egui::Ui) {
         let mut input_to_send = Vec::new();
 
-        // 处理键盘输入
-        if ui.input(|i| !i.events.is_empty()) {
-            for event in ui.input(|i| i.events.clone()) {
+        // 先检查 Context 级别的输入状态（在 egui 处理之前）
+        let ctx = ui.ctx().clone();
+
+        // 手动检查 Ctrl 组合键的按下状态
+        ctx.input(|i| {
+            // 检查高层事件，egui 会将 Ctrl+C/X/V 等转换成这些事件
+            for event in &i.events {
                 match event {
-                    egui::Event::Text(text) => {
+                    egui::Event::Copy => {
+                        println!("[DEBUG] 拦截 Copy 事件，发送 Ctrl+C (0x03)");
+                        input_to_send.push(0x03);
+                    }
+                    egui::Event::Cut => {
+                        println!("[DEBUG] 拦截 Cut 事件，发送 Ctrl+X (0x18)");
+                        input_to_send.push(0x18);
+                    }
+                    egui::Event::Paste(_) => {
+                        // Paste 事件应该粘贴内容，不是发送 Ctrl+V
+                        // 这里暂时不处理，让后续的 Text 事件处理
+                        println!("[DEBUG] 拦截 Paste 事件（暂不处理，等待 Text 事件）");
+                    }
+                    _ => {}
+                }
+            }
+
+            // 检查各个字母键是否被按下 (用于其他 Ctrl 组合键)
+            if i.modifiers.ctrl && input_to_send.is_empty() {
+                for (key_char, key_code, byte) in [
+                    ('A', egui::Key::A, 0x01),
+                    ('B', egui::Key::B, 0x02),
+                    ('D', egui::Key::D, 0x04),
+                    ('E', egui::Key::E, 0x05),
+                    ('F', egui::Key::F, 0x06),
+                    ('G', egui::Key::G, 0x07),
+                    ('H', egui::Key::H, 0x08),
+                    ('I', egui::Key::I, 0x09),
+                    ('J', egui::Key::J, 0x0A),
+                    ('K', egui::Key::K, 0x0B),
+                    ('L', egui::Key::L, 0x0C),
+                    ('M', egui::Key::M, 0x0D),
+                    ('N', egui::Key::N, 0x0E),
+                    ('O', egui::Key::O, 0x0F),
+                    ('P', egui::Key::P, 0x10),
+                    ('Q', egui::Key::Q, 0x11),
+                    ('R', egui::Key::R, 0x12),
+                    ('S', egui::Key::S, 0x13),
+                    ('T', egui::Key::T, 0x14),
+                    ('U', egui::Key::U, 0x15),
+                    ('W', egui::Key::W, 0x17),
+                    ('Y', egui::Key::Y, 0x19),
+                    ('Z', egui::Key::Z, 0x1A),
+                ] {
+                    if i.key_pressed(key_code) {
+                        println!("[DEBUG] Ctrl+{} 通过 key_pressed 检测到", key_char);
+                        input_to_send.push(byte);
+                        break;
+                    }
+                }
+            }
+        });
+
+        // 使用 input_mut 以便能够消费事件
+        ui.input_mut(|i| {
+            // 先处理原始按键事件，检测 Ctrl 组合键
+            let mut keys_to_consume = Vec::new();
+
+            for event in &i.events {
+                if let egui::Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } = event
+                {
+                    if modifiers.ctrl {
+                        // 调试日志
+                        println!("[DEBUG] Ctrl 组合键检测到: {:?}", key);
+
+                        // 记录需要消费的按键
+                        keys_to_consume.push(*key);
+
+                        // 手动映射 Ctrl 组合键
+                        let code = match key {
+                            egui::Key::A => Some(0x01),
+                            egui::Key::B => Some(0x02),
+                            egui::Key::C => Some(0x03),
+                            egui::Key::D => Some(0x04),
+                            egui::Key::E => Some(0x05),
+                            egui::Key::F => Some(0x06),
+                            egui::Key::G => Some(0x07),
+                            egui::Key::H => Some(0x08),
+                            egui::Key::I => Some(0x09),
+                            egui::Key::J => Some(0x0A),
+                            egui::Key::K => Some(0x0B),
+                            egui::Key::L => Some(0x0C),
+                            egui::Key::M => Some(0x0D),
+                            egui::Key::N => Some(0x0E),
+                            egui::Key::O => Some(0x0F),
+                            egui::Key::P => Some(0x10),
+                            egui::Key::Q => Some(0x11),
+                            egui::Key::R => Some(0x12),
+                            egui::Key::S => Some(0x13),
+                            egui::Key::T => Some(0x14),
+                            egui::Key::U => Some(0x15),
+                            egui::Key::V => Some(0x16),
+                            egui::Key::W => Some(0x17),
+                            egui::Key::X => Some(0x18),
+                            egui::Key::Y => Some(0x19),
+                            egui::Key::Z => Some(0x1A),
+                            egui::Key::OpenBracket => Some(0x1B),
+                            egui::Key::Backslash => Some(0x1C),
+                            egui::Key::CloseBracket => Some(0x1D),
+                            egui::Key::Num6 => Some(0x1E),
+                            egui::Key::Minus => Some(0x1F),
+                            egui::Key::Num2 => Some(0x00), // Ctrl+@
+                            _ => None,
+                        };
+
+                        if let Some(c) = code {
+                            println!("[DEBUG] 发送控制码: 0x{:02X}", c);
+                            input_to_send.push(c);
+                        }
+                    }
+                }
+            }
+
+            // 消费掉 Ctrl 组合键，防止 egui 默认处理
+            for key in keys_to_consume {
+                i.consume_key(egui::Modifiers::CTRL, key);
+            }
+
+            // 再处理其他事件
+            for event in &i.events {
+                match event {
+                    // 特别处理 IME 提交事件
+                    egui::Event::Ime(egui::ImeEvent::Commit(text)) => {
+                        println!("[DEBUG] IME Commit: {:?}", text);
                         input_to_send.extend_from_slice(text.as_bytes());
                     }
+                    // 普通文本输入
+                    egui::Event::Text(text) => {
+                        // 调试：显示所有文本字符（包括控制字符）
+                        for c in text.chars() {
+                            let code = c as u32;
+                            println!("[DEBUG] Text 事件字符: {:?} (0x{:02X})", c, code);
+
+                            // 检查是否是控制字符
+                            if code <= 0x1F {
+                                println!("[DEBUG] 检测到控制字符，直接发送: 0x{:02X}", code);
+                                input_to_send.push(code as u8);
+                            } else {
+                                let mut b = [0; 4];
+                                input_to_send.extend_from_slice(c.encode_utf8(&mut b).as_bytes());
+                            }
+                        }
+                    }
+                    // 按键事件（非 Ctrl 组合键）
                     egui::Event::Key {
-                        key, pressed: true, ..
+                        key,
+                        pressed: true,
+                        modifiers,
+                        ..
                     } => {
-                        // 处理特殊键
-                        if let Some(key_code) = self.key_to_bytes(key) {
-                            input_to_send.extend(key_code);
+                        println!(
+                            "[DEBUG] Key 事件: {:?}, Ctrl={}, Alt={}, Shift={}",
+                            key, modifiers.ctrl, modifiers.alt, modifiers.shift
+                        );
+
+                        if !modifiers.ctrl && modifiers.alt {
+                            // 处理 Alt 组合键 (Meta 键支持)
+                            if let Some(mut bytes) = self.key_to_bytes(*key) {
+                                input_to_send.push(0x1b); // 发送 ESC 前缀
+                                input_to_send.append(&mut bytes);
+                            }
+                        } else if !modifiers.ctrl && !modifiers.alt {
+                            // 普通功能按键 (Tab, ArrowKeys, Backspace, Home, End, F1-F12等)
+                            if let Some(key_code) = self.key_to_bytes(*key) {
+                                input_to_send.extend(key_code);
+                            }
                         }
                     }
                     _ => {}
                 }
             }
-        }
+        });
 
         // 发送收集到的输入
         if !input_to_send.is_empty() {
+            println!(
+                "[DEBUG] 发送 {} 字节到终端: {:?}",
+                input_to_send.len(),
+                input_to_send
+            );
             self.send_to_terminal(&input_to_send);
         }
     }
@@ -1777,8 +1978,24 @@ impl App {
         self.connection_form = ConnectionForm::default();
 
         // 8. 初始化终端仿真器
+        let mut emulator = TerminalEmulator::new(40, 120);
+
+        // 设置终端事件回调
+        let session_name_clone = session_name.clone();
+        let manager_clone = self.connection_manager.clone();
+        emulator.set_event_callback(move |event| {
+            if let crate::terminal::TerminalEvent::Resize { rows, cols } = event {
+                let manager = manager_clone.lock().unwrap();
+                if let Some(session) = manager.get_session(&session_name_clone) {
+                    if let Err(e) = session.resize_terminal(rows as u32, cols as u32) {
+                        eprintln!("调整终端大小失败: {}", e);
+                    }
+                }
+            }
+        });
+
         self.terminal_emulators
-            .insert(session_name.clone(), TerminalEmulator::new(40, 120));
+            .insert(session_name.clone(), emulator);
 
         // 9. 在后台线程中执行连接
         let manager_arc = self.connection_manager.clone();
@@ -1908,8 +2125,10 @@ impl App {
         if let Some(ref session_name) = self.current_session {
             let manager = self.connection_manager.lock().unwrap();
             if let Some(session) = manager.get_session(session_name) {
-                if let Err(e) = session.write_terminal(data) {
-                    eprintln!("发送数据失败: {}", e);
+                if session.is_connected() {
+                    if let Err(e) = session.write_terminal(data) {
+                        eprintln!("[TermLink] 发送数据失败: {}", e);
+                    }
                 }
             }
         }
@@ -1998,14 +2217,20 @@ impl App {
     /// 将按键转换为字节序列
     fn key_to_bytes(&self, key: egui::Key) -> Option<Vec<u8>> {
         match key {
-            egui::Key::Enter => Some(b"\r".to_vec()), // 大多数SSH服务器期望 CR (\r)
-            egui::Key::Backspace => Some(b"\x7f".to_vec()), // 现代Linux系统通常使用 DEL (\x7f)
+            egui::Key::Enter => Some(b"\r".to_vec()),
+            egui::Key::Backspace => Some(b"\x7f".to_vec()),
             egui::Key::Tab => Some(b"\t".to_vec()),
             egui::Key::Escape => Some(b"\x1b".to_vec()),
             egui::Key::ArrowUp => Some(b"\x1b[A".to_vec()),
             egui::Key::ArrowDown => Some(b"\x1b[B".to_vec()),
             egui::Key::ArrowLeft => Some(b"\x1b[D".to_vec()),
             egui::Key::ArrowRight => Some(b"\x1b[C".to_vec()),
+            egui::Key::Delete => Some(b"\x1b[3~".to_vec()),
+            egui::Key::Insert => Some(b"\x1b[2~".to_vec()),
+            egui::Key::Home => Some(b"\x1b[H".to_vec()),
+            egui::Key::End => Some(b"\x1b[F".to_vec()),
+            egui::Key::PageUp => Some(b"\x1b[5~".to_vec()),
+            egui::Key::PageDown => Some(b"\x1b[6~".to_vec()),
             _ => None,
         }
     }
@@ -2017,12 +2242,12 @@ impl App {
         } else {
             crate::terminal::ThemeStyle::dark()
         };
+        let theme =
+            crate::terminal::TerminalTheme::new(theme_style, self.settings.terminal.font_size);
 
         // 更新所有已存在的终端仿真器主题
         for (_, emulator) in self.terminal_emulators.iter_mut() {
-            // 这里需要更新终端渲染器的主题
-            // 由于TerminalRenderer不在公共API中，我们暂时只更新设置
-            println!("主题已更新为: {}", self.settings.get_current_theme());
+            emulator.update_theme(theme.clone());
         }
     }
 }
