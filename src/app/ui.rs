@@ -720,33 +720,13 @@ impl App {
     /// 连接列表面板（侧边栏集成管理）
     fn connections_panel(&mut self, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
-            ui.horizontal(|ui| {
-                ui.heading(self.i18n.get(I18nKey::ConnectionManagement));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui
-                        .button("➕")
-                        .on_hover_text(self.i18n.get(I18nKey::NewConnection))
-                        .clicked()
-                    {
-                        self.connection_form = ConnectionForm::default();
-                        self.editing_connection_name = None;
-                        self.show_connection_dialog = true;
-                    }
-                    if ui
-                        .button("📁")
-                        .on_hover_text(self.i18n.get(I18nKey::NewGroup))
-                        .clicked()
-                    {
-                        self.group_form = GroupForm::default();
-                        self.editing_group_index = None;
-                        self.show_create_group_dialog = true;
-                    }
-                });
-            });
+            // ui.horizontal(|ui| {
+            //     ui.heading(self.i18n.get(I18nKey::ConnectionManagement));
+            // });
 
-            ui.separator();
+            // ui.separator();
 
-            // 视图切换控制
+            // 视图切换控制和新建按钮
             ui.horizontal(|ui| {
                 ui.selectable_value(
                     &mut self.show_group_view,
@@ -758,6 +738,27 @@ impl App {
                     true,
                     self.i18n.get(I18nKey::Groups),
                 );
+
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .button("📁")
+                        .on_hover_text(self.i18n.get(I18nKey::NewGroup))
+                        .clicked()
+                    {
+                        self.group_form = GroupForm::default();
+                        self.editing_group_index = None;
+                        self.show_create_group_dialog = true;
+                    }
+                    if ui
+                        .button("🔗")
+                        .on_hover_text(self.i18n.get(I18nKey::NewConnection))
+                        .clicked()
+                    {
+                        self.connection_form = ConnectionForm::default();
+                        self.editing_connection_name = None;
+                        self.show_connection_dialog = true;
+                    }
+                });
             });
 
             ui.separator();
@@ -815,14 +816,14 @@ impl App {
 
                 response.context_menu(|ui| {
                     if ui
-                        .button(&format!("🔄 {}", self.i18n.get(I18nKey::Connect)))
+                        .button(&format!("{} {}", "🔗", self.i18n.get(I18nKey::Connect)))
                         .clicked()
                     {
                         self.connect_from_history(config.clone());
                         ui.close_menu();
                     }
                     if ui
-                        .button(&format!("✏️ {}", self.i18n.get(I18nKey::Edit)))
+                        .button(&format!("{} {}", "✏", self.i18n.get(I18nKey::Edit)))
                         .clicked()
                     {
                         self.edit_connection(config.clone());
@@ -830,14 +831,22 @@ impl App {
                     }
                     ui.separator();
                     if ui
-                        .button(&format!("🧹 {}", self.i18n.get(I18nKey::RemoveFromRecent)))
+                        .button(&format!(
+                            "{} {}",
+                            "⌦",
+                            self.i18n.get(I18nKey::RemoveFromRecent)
+                        ))
                         .clicked()
                     {
                         self.clear_connection_history(original_index);
                         ui.close_menu();
                     }
                     if ui
-                        .button(&format!("🗑️ {}", self.i18n.get(I18nKey::DeletePermanently)))
+                        .button(&format!(
+                            "{} {}",
+                            "🗑",
+                            self.i18n.get(I18nKey::DeletePermanently)
+                        ))
                         .clicked()
                     {
                         self.delete_connection(original_index);
@@ -848,7 +857,7 @@ impl App {
         }
 
         ui.separator();
-        if ui.button("🧹 清空所有历史").clicked() {
+        if ui.button(&format!("{} {}", "⌦", "清空所有历史")).clicked() {
             for config in self.connection_history.iter_mut() {
                 config.last_connected = None;
             }
@@ -859,7 +868,7 @@ impl App {
     /// 侧边栏渲染分组
     fn render_sidebar_groups(&mut self, ui: &mut egui::Ui) {
         if self.connection_groups.is_empty() {
-            ui.weak("暂无分组");
+            ui.weak(self.i18n.get(I18nKey::NoGroups));
             return;
         }
 
@@ -870,72 +879,126 @@ impl App {
 
         let groups_clone = self.connection_groups.clone();
         for (group_index, group) in groups_clone.iter().enumerate() {
-            egui::CollapsingHeader::new(&group.name)
-                .default_open(false)
-                .show(ui, |ui| {
-                    for base_conn_name in &group.connections {
-                        ui.horizontal(|ui| {
-                            let response = ui.selectable_label(false, base_conn_name);
-                            // 点击不再直接连接，仅供选择（或通过右键连接）
+            // 使用更丰富的头部显示，包括图标和连接数统计
+            let header_title = format!("{} ({})", group.name, group.connections.len());
 
-                            response.context_menu(|ui| {
-                                if ui
-                                    .button(&format!("🔄 {}", self.i18n.get(I18nKey::Connect)))
-                                    .clicked()
-                                {
-                                    self.connect_from_group(group_index, base_conn_name);
-                                    ui.close_menu();
-                                }
-                                if ui
-                                    .button(&format!("✏️ {}", self.i18n.get(I18nKey::Edit)))
-                                    .clicked()
-                                {
-                                    self.edit_connection_from_group(group_index, base_conn_name);
-                                    ui.close_menu();
-                                }
-                                ui.separator();
-                                if ui
-                                    .button(&format!(
-                                        "🗑️ {}",
-                                        self.i18n.get(I18nKey::RemoveFromGroup)
-                                    ))
-                                    .clicked()
-                                {
-                                    self.remove_connection_from_group(group_index, base_conn_name);
-                                    ui.close_menu();
-                                }
-                                if let Some(h_idx) =
-                                    find_history_index(&self.connection_history, base_conn_name)
-                                {
+            // 创建可交互的分组头部，增强视觉反馈
+            let header = egui::CollapsingHeader::new(header_title)
+                .default_open(true);
+            
+            let header_response = header.show(ui, |ui| {
+                // 为整个内容区域添加背景色变化效果
+                let rect = ui.available_rect_before_wrap();
+                let is_hovered = ui.rect_contains_pointer(rect);
+                
+                if is_hovered {
+                    // 悬停时添加背景色
+                    ui.painter().rect_filled(
+                        rect.expand(2.0f32), 
+                        egui::Rounding::same(3u8),
+                        ui.visuals().widgets.hovered.bg_fill
+                    );
+                }
+                
+                ui.indent("connection_indent", |ui| {
+                        for base_conn_name in &group.connections {
+                            // 检查连接是否处于活动状态
+                            let is_connected = {
+                                let manager = self.connection_manager.lock().unwrap();
+                                manager.has_session(base_conn_name)
+                            };
+
+                            ui.horizontal(|ui| {
+                                // 根据连接状态显示不同图标（使用egui内置图标）
+                                let icon_text = if is_connected { "●" } else { "○" };
+                                let icon_color = if is_connected {
+                                    egui::Color32::GREEN
+                                } else {
+                                    egui::Color32::GRAY
+                                };
+
+                                ui.colored_label(icon_color, icon_text);
+
+                                let response = ui.selectable_label(false, base_conn_name);
+
+                                response.context_menu(|ui| {
                                     if ui
                                         .button(&format!(
-                                            "🔥 {}",
-                                            self.i18n.get(I18nKey::DeletePermanently)
+                                            "{} {}",
+                                            "🔗",
+                                            self.i18n.get(I18nKey::Connect)
                                         ))
                                         .clicked()
                                     {
-                                        self.delete_connection(h_idx);
+                                        self.connect_from_group(group_index, base_conn_name);
                                         ui.close_menu();
                                     }
-                                }
+                                    if ui
+                                        .button(&format!(
+                                            "{} {}",
+                                            "✏",
+                                            self.i18n.get(I18nKey::Edit)
+                                        ))
+                                        .clicked()
+                                    {
+                                        self.edit_connection_from_group(
+                                            group_index,
+                                            base_conn_name,
+                                        );
+                                        ui.close_menu();
+                                    }
+                                    ui.separator();
+                                    if ui
+                                        .button(&format!(
+                                            "{} {}",
+                                            "✂",
+                                            self.i18n.get(I18nKey::RemoveFromGroup)
+                                        ))
+                                        .clicked()
+                                    {
+                                        self.remove_connection_from_group(
+                                            group_index,
+                                            base_conn_name,
+                                        );
+                                        ui.close_menu();
+                                    }
+                                    if let Some(h_idx) =
+                                        find_history_index(&self.connection_history, base_conn_name)
+                                    {
+                                        if ui
+                                            .button(&format!(
+                                                "{} {}",
+                                                "🗑",
+                                                self.i18n.get(I18nKey::DeletePermanently)
+                                            ))
+                                            .clicked()
+                                        {
+                                            self.delete_connection(h_idx);
+                                            ui.close_menu();
+                                        }
+                                    }
+                                });
                             });
-                        });
-                    }
-                    if group.connections.is_empty() {
-                        ui.weak("空分组");
-                    }
+
+                            ui.add_space(2.0); // 在每个连接项之间添加一点间距
+                        }
+
+                        if group.connections.is_empty() {
+                            ui.weak(self.i18n.get(I18nKey::EmptyGroup));
+                        }
+                    });
                 })
                 .header_response
                 .context_menu(|ui| {
                     if ui
-                        .button(&format!("✏️ {}", self.i18n.get(I18nKey::EditGroup)))
+                        .button(&format!("{} {}", "✏", self.i18n.get(I18nKey::EditGroup)))
                         .clicked()
                     {
                         self.edit_group(group_index);
                         ui.close_menu();
                     }
                     if ui
-                        .button(&format!("🗑️ {}", self.i18n.get(I18nKey::DeleteGroup)))
+                        .button(&format!("{} {}", "🗑", self.i18n.get(I18nKey::DeleteGroup)))
                         .clicked()
                     {
                         self.delete_group(group_index);

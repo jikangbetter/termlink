@@ -154,6 +154,16 @@ impl ConnectionManager {
         sessions.contains_key(session_name)
     }
 
+    /// 检查会话是否存在并已连接
+    pub fn has_session(&self, session_name: &str) -> bool {
+        let sessions = self.sessions.lock().unwrap();
+        if let Some(session) = sessions.get(session_name) {
+            session.is_connected()
+        } else {
+            false
+        }
+    }
+
     /// 执行远程命令
     pub fn execute_command(&self, session_name: &str, command: &str) -> Result<String> {
         let sessions = self.sessions.lock().unwrap();

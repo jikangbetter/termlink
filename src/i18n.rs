@@ -142,6 +142,7 @@ pub enum I18nKey {
     // 分组功能
     NoGroup,
     SelectGroup,
+    AddConnection,
 
     // 连接表单
     PasswordLabel,
@@ -280,6 +281,7 @@ impl I18nManager {
         // 分组功能
         zh_translations.insert(I18nKey::NoGroup, "未分组");
         zh_translations.insert(I18nKey::SelectGroup, "选择分组");
+        zh_translations.insert(I18nKey::AddConnection, "添加连接");
 
         // 连接表单
         zh_translations.insert(I18nKey::PasswordLabel, "密码:");
@@ -393,6 +395,7 @@ impl I18nManager {
         // Group functionality
         en_translations.insert(I18nKey::NoGroup, "No Group");
         en_translations.insert(I18nKey::SelectGroup, "Select Group");
+        en_translations.insert(I18nKey::AddConnection, "Add Connection");
 
         // Connection form
         en_translations.insert(I18nKey::PasswordLabel, "Password:");
