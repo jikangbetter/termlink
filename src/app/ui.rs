@@ -802,13 +802,18 @@ impl App {
 
         for (original_index, config) in history_items {
             ui.horizontal(|ui| {
-                let response = ui.selectable_label(
-                    self.current_session
-                        .as_ref()
-                        .map(|s| self.extract_base_connection_name(s))
-                        == Some(config.name.clone()),
-                    &config.name,
-                );
+                let is_selected = self
+                    .current_session
+                    .as_ref()
+                    .map(|s| self.extract_base_connection_name(s))
+                    == Some(config.name.clone());
+
+                // 使用 top_down_justified 布局让按钮占满宽度且文字左对齐
+                let response = ui
+                    .with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
+                        ui.selectable_label(is_selected, &config.name)
+                    })
+                    .inner;
 
                 if response.clicked() {
                     self.connect_from_history(config.clone());
@@ -833,7 +838,7 @@ impl App {
                     if ui
                         .button(&format!(
                             "{} {}",
-                            "⌦",
+                            "❌",
                             self.i18n.get(I18nKey::RemoveFromRecent)
                         ))
                         .clicked()
@@ -857,7 +862,7 @@ impl App {
         }
 
         ui.separator();
-        if ui.button(&format!("{} {}", "⌦", "清空所有历史")).clicked() {
+        if ui.button(&format!("{} {}", "🗑", "清空所有历史")).clicked() {
             for config in self.connection_history.iter_mut() {
                 config.last_connected = None;
             }
@@ -882,25 +887,25 @@ impl App {
             // 使用更丰富的头部显示，包括图标和连接数统计
             let header_title = format!("{} ({})", group.name, group.connections.len());
 
-            // 创建可交互的分组头部，增强视觉反馈
-            let header = egui::CollapsingHeader::new(header_title)
-                .default_open(true);
-            
-            let header_response = header.show(ui, |ui| {
-                // 为整个内容区域添加背景色变化效果
-                let rect = ui.available_rect_before_wrap();
-                let is_hovered = ui.rect_contains_pointer(rect);
-                
-                if is_hovered {
-                    // 悬停时添加背景色
-                    ui.painter().rect_filled(
-                        rect.expand(2.0f32), 
-                        egui::Rounding::same(3u8),
-                        ui.visuals().widgets.hovered.bg_fill
-                    );
-                }
-                
-                ui.indent("connection_indent", |ui| {
+            // 为分组名称添加可悬停的背景效果（类似按钮的视觉反馈）
+            let header_height = ui.spacing().interact_size.y + 4.0;
+            let mut header_rect = ui.available_rect_before_wrap();
+            header_rect.set_height(header_height);
+            let is_header_hovered = ui.rect_contains_pointer(header_rect);
+            if is_header_hovered {
+                ui.painter().rect_filled(
+                    header_rect,
+                    egui::Rounding::same(3),
+                    ui.visuals().widgets.hovered.bg_fill,
+                );
+            }
+
+            // 创建可交互的分组头部，默认展开
+            let header = egui::CollapsingHeader::new(header_title).default_open(true);
+
+            let header_response = header
+                .show(ui, |ui| {
+                    ui.indent("connection_indent", |ui| {
                         for base_conn_name in &group.connections {
                             // 检查连接是否处于活动状态
                             let is_connected = {
@@ -919,7 +924,13 @@ impl App {
 
                                 ui.colored_label(icon_color, icon_text);
 
-                                let response = ui.selectable_label(false, base_conn_name);
+                                // 使用 top_down_justified 布局让按钮占满剩余宽度且文字左对齐
+                                let response = ui
+                                    .with_layout(
+                                        egui::Layout::top_down_justified(egui::Align::LEFT),
+                                        |ui| ui.selectable_label(false, base_conn_name),
+                                    )
+                                    .inner;
 
                                 response.context_menu(|ui| {
                                     if ui
