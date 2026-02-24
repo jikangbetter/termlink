@@ -47,6 +47,13 @@ pub enum I18nKey {
     MenuExportConfig,
     MenuOverwrite,
     MenuMerge,
+    SelectConfigFile,
+    ExportPath,
+    ImportMode,
+    ImportButton,
+    ExportButton,
+    SelectPreset,
+    BrightColors,
 
     // 连接管理
     ConnectionManagement,
@@ -225,6 +232,13 @@ impl I18nManager {
         zh_translations.insert(I18nKey::MenuExportConfig, "导出配置");
         zh_translations.insert(I18nKey::MenuOverwrite, "覆盖当前配置");
         zh_translations.insert(I18nKey::MenuMerge, "合并到当前配置");
+        zh_translations.insert(I18nKey::SelectConfigFile, "选择配置文件:");
+        zh_translations.insert(I18nKey::ExportPath, "导出路径:");
+        zh_translations.insert(I18nKey::ImportMode, "导入模式:");
+        zh_translations.insert(I18nKey::ImportButton, "导入");
+        zh_translations.insert(I18nKey::ExportButton, "导出");
+        zh_translations.insert(I18nKey::SelectPreset, "选择配色方案预设");
+        zh_translations.insert(I18nKey::BrightColors, "明亮色");
 
         zh_translations.insert(I18nKey::ConnectionManagement, "连接管理");
         zh_translations.insert(I18nKey::NewConnection, "新建连接");
@@ -376,6 +390,13 @@ impl I18nManager {
         en_translations.insert(I18nKey::MenuExportConfig, "Export Config");
         en_translations.insert(I18nKey::MenuOverwrite, "Overwrite Current Config");
         en_translations.insert(I18nKey::MenuMerge, "Merge into Current Config");
+        en_translations.insert(I18nKey::SelectConfigFile, "Select Config File:");
+        en_translations.insert(I18nKey::ExportPath, "Export Path:");
+        en_translations.insert(I18nKey::ImportMode, "Import Mode:");
+        en_translations.insert(I18nKey::ImportButton, "Import");
+        en_translations.insert(I18nKey::ExportButton, "Export");
+        en_translations.insert(I18nKey::SelectPreset, "Select Color Preset");
+        en_translations.insert(I18nKey::BrightColors, "Bright Colors");
 
         en_translations.insert(I18nKey::ConnectionManagement, "Connection Management");
         en_translations.insert(I18nKey::NewConnection, "New Connection");

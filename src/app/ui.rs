@@ -176,315 +176,348 @@ impl SettingsDialog {
 
         egui::Window::new(i18n.get(I18nKey::SettingsTitle))
             .default_width(500.0)
-            .default_height(400.0)
+            .default_height(500.0)
+            .max_height(600.0)
             .collapsible(false)
             .show(ctx, |ui| {
-                ui.vertical(|ui| {
-                    // 语言设置
-                    ui.group(|ui| {
-                        ui.heading(i18n.get(I18nKey::Language));
-                        ui.separator();
+                egui::ScrollArea::vertical()
+                    .max_height(550.0)
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            // 语言设置
+                            ui.group(|ui| {
+                                ui.heading(i18n.get(I18nKey::Language));
+                                ui.separator();
 
-                        egui::ComboBox::from_label(i18n.get(I18nKey::Language))
-                            .selected_text(match self.temp_language {
-                                Language::Chinese => i18n.get(I18nKey::Chinese),
-                                Language::English => i18n.get(I18nKey::English),
-                            })
-                            .show_ui(ui, |ui| {
-                                if ui
-                                    .selectable_value(
-                                        &mut self.temp_language,
-                                        Language::Chinese,
-                                        i18n.get(I18nKey::Chinese),
-                                    )
-                                    .clicked()
-                                {
-                                    // 语言切换时立即更新界面
-                                }
-                                if ui
-                                    .selectable_value(
-                                        &mut self.temp_language,
-                                        Language::English,
-                                        i18n.get(I18nKey::English),
-                                    )
-                                    .clicked()
-                                {
-                                    // 语言切换时立即更新界面
-                                }
-                            });
-                    });
-
-                    ui.add_space(10.0);
-
-                    // 外观设置
-                    ui.group(|ui| {
-                        ui.heading(i18n.get(I18nKey::Appearance));
-                        ui.separator();
-
-                        egui::ComboBox::from_label(i18n.get(I18nKey::Theme))
-                            .selected_text(match self.temp_theme.as_str() {
-                                "dark" => i18n.get(I18nKey::DarkTheme),
-                                "light" => i18n.get(I18nKey::LightTheme),
-                                "custom" => i18n.get(I18nKey::CustomTheme),
-                                _ => i18n.get(I18nKey::DarkTheme),
-                            })
-                            .show_ui(ui, |ui| {
-                                if ui
-                                    .selectable_value(
-                                        &mut self.temp_theme,
-                                        "dark".to_string(),
-                                        i18n.get(I18nKey::DarkTheme),
-                                    )
-                                    .clicked()
-                                {
-                                    self.temp_settings.appearance.theme_mode = ThemeMode::Dark;
-                                    self.temp_settings.terminal.theme = "dark".to_string();
-                                }
-                                if ui
-                                    .selectable_value(
-                                        &mut self.temp_theme,
-                                        "light".to_string(),
-                                        i18n.get(I18nKey::LightTheme),
-                                    )
-                                    .clicked()
-                                {
-                                    self.temp_settings.appearance.theme_mode = ThemeMode::Light;
-                                    self.temp_settings.terminal.theme = "light".to_string();
-                                }
-                                if ui
-                                    .selectable_value(
-                                        &mut self.temp_theme,
-                                        "custom".to_string(),
-                                        i18n.get(I18nKey::CustomTheme),
-                                    )
-                                    .clicked()
-                                {
-                                    self.temp_settings.terminal.theme = "custom".to_string();
-                                    // 初始化自定义主题
-                                    if self.temp_settings.terminal.custom_theme.is_none() {
-                                        self.temp_settings.terminal.custom_theme =
-                                            Some(crate::config::settings::CustomTheme::default());
-                                    }
-                                }
-                            });
-                    });
-
-                    ui.add_space(10.0);
-
-                    // 终端设置
-                    ui.group(|ui| {
-                        ui.heading(i18n.get(I18nKey::TerminalSettings));
-                        ui.separator();
-
-                        ui.horizontal(|ui| {
-                            ui.label(i18n.get(I18nKey::FontSize));
-
-                            // 减少字体大小按钮
-                            if ui.button("−").clicked() {
-                                let current_size = self.temp_settings.terminal.font_size;
-                                if current_size > 8.0 {
-                                    self.temp_settings.terminal.font_size =
-                                        (current_size - 1.0).max(8.0);
-                                }
-                            }
-
-                            // 字体大小输入框
-                            ui.add(
-                                egui::DragValue::new(&mut self.temp_settings.terminal.font_size)
-                                    .speed(1.0)
-                                    .clamp_range(8.0..=32.0),
-                            );
-
-                            // 增加字体大小按钮
-                            if ui.button("+").clicked() {
-                                let current_size = self.temp_settings.terminal.font_size;
-                                if current_size < 32.0 {
-                                    self.temp_settings.terminal.font_size =
-                                        (current_size + 1.0).min(32.0);
-                                }
-                            }
-                        });
-
-                        ui.horizontal(|ui| {
-                            ui.label(i18n.get(I18nKey::FontFamily));
-                            ui.text_edit_singleline(&mut self.temp_settings.terminal.font_family);
-                        });
-
-                        ui.checkbox(
-                            &mut self.temp_settings.terminal.cursor_blink,
-                            i18n.get(I18nKey::CursorBlink),
-                        );
-
-                        // 如果选择了自定义主题，显示颜色选择器
-                        if self.temp_settings.terminal.theme == "custom" {
-                            ui.add_space(10.0);
-                            ui.separator();
-
-                            ui.horizontal(|ui| {
-                                ui.heading(i18n.get(I18nKey::CustomTheme));
-
-                                // 配色方案预设
-                                egui::ComboBox::from_id_salt("preset_selector")
-                                    .selected_text("选择配色方案预设")
+                                egui::ComboBox::from_label(i18n.get(I18nKey::Language))
+                                    .selected_text(match self.temp_language {
+                                        Language::Chinese => i18n.get(I18nKey::Chinese),
+                                        Language::English => i18n.get(I18nKey::English),
+                                    })
                                     .show_ui(ui, |ui| {
-                                        for (name, preset) in
-                                            crate::config::settings::CustomTheme::presets()
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.temp_language,
+                                                Language::Chinese,
+                                                i18n.get(I18nKey::Chinese),
+                                            )
+                                            .clicked()
                                         {
-                                            if ui.button(name).clicked() {
-                                                if let Some(ref mut custom) =
-                                                    self.temp_settings.terminal.custom_theme
-                                                {
-                                                    *custom = preset;
-                                                }
+                                            // 语言切换时立即更新界面
+                                        }
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.temp_language,
+                                                Language::English,
+                                                i18n.get(I18nKey::English),
+                                            )
+                                            .clicked()
+                                        {
+                                            // 语言切换时立即更新界面
+                                        }
+                                    });
+                            });
+
+                            ui.add_space(10.0);
+
+                            // 外观设置
+                            ui.group(|ui| {
+                                ui.heading(i18n.get(I18nKey::Appearance));
+                                ui.separator();
+
+                                egui::ComboBox::from_label(i18n.get(I18nKey::Theme))
+                                    .selected_text(match self.temp_theme.as_str() {
+                                        "dark" => i18n.get(I18nKey::DarkTheme),
+                                        "light" => i18n.get(I18nKey::LightTheme),
+                                        "custom" => i18n.get(I18nKey::CustomTheme),
+                                        _ => i18n.get(I18nKey::DarkTheme),
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.temp_theme,
+                                                "dark".to_string(),
+                                                i18n.get(I18nKey::DarkTheme),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.temp_settings.appearance.theme_mode =
+                                                ThemeMode::Dark;
+                                            self.temp_settings.terminal.theme = "dark".to_string();
+                                        }
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.temp_theme,
+                                                "light".to_string(),
+                                                i18n.get(I18nKey::LightTheme),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.temp_settings.appearance.theme_mode =
+                                                ThemeMode::Light;
+                                            self.temp_settings.terminal.theme = "light".to_string();
+                                        }
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.temp_theme,
+                                                "custom".to_string(),
+                                                i18n.get(I18nKey::CustomTheme),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.temp_settings.terminal.theme =
+                                                "custom".to_string();
+                                            // 初始化自定义主题
+                                            if self.temp_settings.terminal.custom_theme.is_none() {
+                                                self.temp_settings.terminal.custom_theme = Some(
+                                                    crate::config::settings::CustomTheme::default(),
+                                                );
                                             }
                                         }
                                     });
                             });
 
-                            if let Some(ref mut custom_theme) =
-                                self.temp_settings.terminal.custom_theme
-                            {
-                                // 基本颜色
-                                ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::ForegroundColor));
-                                    ui.text_edit_singleline(&mut custom_theme.foreground);
-                                });
+                            ui.add_space(10.0);
 
-                                ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::BackgroundColor));
-                                    ui.text_edit_singleline(&mut custom_theme.background);
-                                });
-
-                                ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::CursorColor));
-                                    ui.text_edit_singleline(&mut custom_theme.cursor);
-                                });
-
-                                ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::SelectionColor));
-                                    ui.text_edit_singleline(&mut custom_theme.selection);
-                                });
-
-                                ui.add_space(10.0);
+                            // 终端设置
+                            ui.group(|ui| {
+                                ui.heading(i18n.get(I18nKey::TerminalSettings));
                                 ui.separator();
-                                ui.heading(i18n.get(I18nKey::StandardColors));
 
-                                // 标准颜色
                                 ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::Black));
-                                    ui.text_edit_singleline(&mut custom_theme.black);
+                                    ui.label(i18n.get(I18nKey::FontSize));
+
+                                    // 减少字体大小按钮
+                                    if ui.button("−").clicked() {
+                                        let current_size = self.temp_settings.terminal.font_size;
+                                        if current_size > 8.0 {
+                                            self.temp_settings.terminal.font_size =
+                                                (current_size - 1.0).max(8.0);
+                                        }
+                                    }
+
+                                    // 字体大小输入框
+                                    ui.add(
+                                        egui::DragValue::new(
+                                            &mut self.temp_settings.terminal.font_size,
+                                        )
+                                        .speed(1.0)
+                                        .clamp_range(8.0..=32.0),
+                                    );
+
+                                    // 增加字体大小按钮
+                                    if ui.button("+").clicked() {
+                                        let current_size = self.temp_settings.terminal.font_size;
+                                        if current_size < 32.0 {
+                                            self.temp_settings.terminal.font_size =
+                                                (current_size + 1.0).min(32.0);
+                                        }
+                                    }
                                 });
 
                                 ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::Red));
-                                    ui.text_edit_singleline(&mut custom_theme.red);
+                                    ui.label(i18n.get(I18nKey::FontFamily));
+                                    ui.text_edit_singleline(
+                                        &mut self.temp_settings.terminal.font_family,
+                                    );
                                 });
 
-                                ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::Green));
-                                    ui.text_edit_singleline(&mut custom_theme.green);
-                                });
-
-                                ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::Yellow));
-                                    ui.text_edit_singleline(&mut custom_theme.yellow);
-                                });
-
-                                ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::Blue));
-                                    ui.text_edit_singleline(&mut custom_theme.blue);
-                                });
-
-                                ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::Magenta));
-                                    ui.text_edit_singleline(&mut custom_theme.magenta);
-                                });
-
-                                ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::Cyan));
-                                    ui.text_edit_singleline(&mut custom_theme.cyan);
-                                });
-
-                                ui.horizontal(|ui| {
-                                    ui.label(i18n.get(I18nKey::White));
-                                    ui.text_edit_singleline(&mut custom_theme.white);
-                                });
-
-                                ui.add_space(10.0);
-                                ui.heading("明亮色");
-
-                                egui::Grid::new("bright_colors_grid")
-                                    .num_columns(2)
-                                    .spacing([10.0, 4.0])
-                                    .show(ui, |ui| {
-                                        ui.label("Black (Bright)");
-                                        ui.text_edit_singleline(&mut custom_theme.bright_black);
-                                        ui.end_row();
-
-                                        ui.label("Red (Bright)");
-                                        ui.text_edit_singleline(&mut custom_theme.bright_red);
-                                        ui.end_row();
-
-                                        ui.label("Green (Bright)");
-                                        ui.text_edit_singleline(&mut custom_theme.bright_green);
-                                        ui.end_row();
-
-                                        ui.label("Yellow (Bright)");
-                                        ui.text_edit_singleline(&mut custom_theme.bright_yellow);
-                                        ui.end_row();
-
-                                        ui.label("Blue (Bright)");
-                                        ui.text_edit_singleline(&mut custom_theme.bright_blue);
-                                        ui.end_row();
-
-                                        ui.label("Magenta (Bright)");
-                                        ui.text_edit_singleline(&mut custom_theme.bright_magenta);
-                                        ui.end_row();
-
-                                        ui.label("Cyan (Bright)");
-                                        ui.text_edit_singleline(&mut custom_theme.bright_cyan);
-                                        ui.end_row();
-
-                                        ui.label("White (Bright)");
-                                        ui.text_edit_singleline(&mut custom_theme.bright_white);
-                                        ui.end_row();
-                                    });
-
-                                ui.add_space(10.0);
-                                if ui.button(i18n.get(I18nKey::ResetToDefault)).clicked() {
-                                    *custom_theme = crate::config::settings::CustomTheme::default();
-                                }
-                            }
-                        }
-                    });
-
-                    ui.add_space(20.0);
-                    ui.separator();
-
-                    // 按钮区域
-                    ui.horizontal(|ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                            if ui.button(i18n.get(I18nKey::Cancel)).clicked() {
-                                self.show = false;
-                            }
-
-                            if ui.button(i18n.get(I18nKey::Save)).clicked() {
-                                // 应用设置
-                                self.temp_settings.appearance.language =
-                                    self.temp_language.to_str().to_string();
-                                // 主题由theme_mode控制，不需要单独设置
-
-                                // 调用回调函数通知设置变更
-                                on_settings_changed(
-                                    self.temp_settings.clone(),
-                                    self.temp_language.clone(),
+                                ui.checkbox(
+                                    &mut self.temp_settings.terminal.cursor_blink,
+                                    i18n.get(I18nKey::CursorBlink),
                                 );
 
-                                self.show = false;
-                            }
+                                // 如果选择了自定义主题，显示颜色选择器
+                                if self.temp_settings.terminal.theme == "custom" {
+                                    ui.add_space(10.0);
+                                    ui.separator();
+
+                                    ui.horizontal(|ui| {
+                                        ui.heading(i18n.get(I18nKey::CustomTheme));
+
+                                        // 配色方案预设
+                                        egui::ComboBox::from_id_salt("preset_selector")
+                                            .selected_text(i18n.get(I18nKey::SelectPreset))
+                                            .show_ui(ui, |ui| {
+                                                for (name, preset) in
+                                                    crate::config::settings::CustomTheme::presets()
+                                                {
+                                                    if ui.button(name).clicked() {
+                                                        if let Some(ref mut custom) =
+                                                            self.temp_settings.terminal.custom_theme
+                                                        {
+                                                            *custom = preset;
+                                                        }
+                                                    }
+                                                }
+                                            });
+                                    });
+
+                                    if let Some(ref mut custom_theme) =
+                                        self.temp_settings.terminal.custom_theme
+                                    {
+                                        // 基本颜色
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::ForegroundColor));
+                                            ui.text_edit_singleline(&mut custom_theme.foreground);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::BackgroundColor));
+                                            ui.text_edit_singleline(&mut custom_theme.background);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::CursorColor));
+                                            ui.text_edit_singleline(&mut custom_theme.cursor);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::SelectionColor));
+                                            ui.text_edit_singleline(&mut custom_theme.selection);
+                                        });
+
+                                        ui.add_space(10.0);
+                                        ui.separator();
+                                        ui.heading(i18n.get(I18nKey::StandardColors));
+
+                                        // 标准颜色
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Black));
+                                            ui.text_edit_singleline(&mut custom_theme.black);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Red));
+                                            ui.text_edit_singleline(&mut custom_theme.red);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Green));
+                                            ui.text_edit_singleline(&mut custom_theme.green);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Yellow));
+                                            ui.text_edit_singleline(&mut custom_theme.yellow);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Blue));
+                                            ui.text_edit_singleline(&mut custom_theme.blue);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Magenta));
+                                            ui.text_edit_singleline(&mut custom_theme.magenta);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Cyan));
+                                            ui.text_edit_singleline(&mut custom_theme.cyan);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::White));
+                                            ui.text_edit_singleline(&mut custom_theme.white);
+                                        });
+
+                                        ui.add_space(10.0);
+                                        ui.heading(i18n.get(I18nKey::BrightColors));
+
+                                        egui::Grid::new("bright_colors_grid")
+                                            .num_columns(2)
+                                            .spacing([10.0, 4.0])
+                                            .show(ui, |ui| {
+                                                ui.label("Black (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_black,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Red (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_red,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Green (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_green,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Yellow (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_yellow,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Blue (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_blue,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Magenta (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_magenta,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Cyan (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_cyan,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("White (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_white,
+                                                );
+                                                ui.end_row();
+                                            });
+
+                                        ui.add_space(10.0);
+                                        if ui.button(i18n.get(I18nKey::ResetToDefault)).clicked() {
+                                            *custom_theme =
+                                                crate::config::settings::CustomTheme::default();
+                                        }
+                                    }
+                                }
+                            });
+
+                            ui.add_space(20.0);
+                            ui.separator();
+
+                            // 按钮区域
+                            ui.horizontal(|ui| {
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Min),
+                                    |ui| {
+                                        if ui.button(i18n.get(I18nKey::Cancel)).clicked() {
+                                            self.show = false;
+                                        }
+
+                                        if ui.button(i18n.get(I18nKey::Save)).clicked() {
+                                            // 应用设置
+                                            self.temp_settings.appearance.language =
+                                                self.temp_language.to_str().to_string();
+                                            // 主题由theme_mode控制，不需要单独设置
+
+                                            // 调用回调函数通知设置变更
+                                            on_settings_changed(
+                                                self.temp_settings.clone(),
+                                                self.temp_language.clone(),
+                                            );
+
+                                            self.show = false;
+                                        }
+                                    },
+                                );
+                            });
                         });
                     });
-                });
             });
     }
 }
@@ -2859,7 +2892,7 @@ impl App {
             .collapsible(false)
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
-                    ui.label("选择配置文件:");
+                    ui.label(self.i18n.get(I18nKey::SelectConfigFile));
                     ui.text_edit_singleline(&mut self.import_file_path);
 
                     if ui.button(self.i18n.get(I18nKey::Browse)).clicked() {
@@ -2867,7 +2900,7 @@ impl App {
                         let dialog = rfd::FileDialog::new()
                             .add_filter("JSON", &["json"])
                             .add_filter("All files", &["*"]);
-                        
+
                         if let Some(path) = dialog.pick_file() {
                             self.import_file_path = path.to_string_lossy().to_string();
                         }
@@ -2876,7 +2909,7 @@ impl App {
                     ui.add_space(10.0);
                     ui.separator();
 
-                    ui.label("导入模式:");
+                    ui.label(self.i18n.get(I18nKey::ImportMode));
                     ui.horizontal(|ui| {
                         ui.radio_value(
                             &mut self.import_overwrite_mode,
@@ -2899,7 +2932,9 @@ impl App {
                             self.import_file_path.clear();
                         }
 
-                        if ui.button("导入").clicked() && !self.import_file_path.is_empty() {
+                        if ui.button(self.i18n.get(I18nKey::ImportButton)).clicked()
+                            && !self.import_file_path.is_empty()
+                        {
                             self.import_config();
                             self.show_import_dialog = false;
                         }
@@ -2916,7 +2951,7 @@ impl App {
             .collapsible(false)
             .show(ctx, |ui| {
                 ui.vertical(|ui| {
-                    ui.label("导出路径:");
+                    ui.label(self.i18n.get(I18nKey::ExportPath));
                     ui.text_edit_singleline(&mut self.export_file_path);
 
                     if ui.button(self.i18n.get(I18nKey::Browse)).clicked() {
@@ -2925,7 +2960,7 @@ impl App {
                             .add_filter("JSON", &["json"])
                             .add_filter("All files", &["*"])
                             .set_file_name("config.json");
-                        
+
                         if let Some(path) = dialog.save_file() {
                             self.export_file_path = path.to_string_lossy().to_string();
                         }
@@ -2940,7 +2975,9 @@ impl App {
                             self.export_file_path.clear();
                         }
 
-                        if ui.button("导出").clicked() && !self.export_file_path.is_empty() {
+                        if ui.button(self.i18n.get(I18nKey::ExportButton)).clicked()
+                            && !self.export_file_path.is_empty()
+                        {
                             self.export_config();
                             self.show_export_dialog = false;
                         }
