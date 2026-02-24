@@ -6,7 +6,9 @@ use crate::config::settings::ThemeMode;
 use crate::config::{AppSettings, ConnectionConfig};
 use crate::i18n::{I18nKey, I18nManager, Language};
 use crate::ssh::{ConnectionManager, ConnectionTestResult, SessionState, SshSession};
-use crate::terminal::TerminalEmulator;
+use crate::terminal::{TerminalEmulator, TextSelector};
+// use crate::terminal::TerminalEmulator; // 已切换到WezTermAdapter
+// use crate::terminal::WezTermAdapter;
 use eframe::egui;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -174,157 +176,348 @@ impl SettingsDialog {
 
         egui::Window::new(i18n.get(I18nKey::SettingsTitle))
             .default_width(500.0)
-            .default_height(400.0)
+            .default_height(500.0)
+            .max_height(600.0)
             .collapsible(false)
             .show(ctx, |ui| {
-                ui.vertical(|ui| {
-                    // 语言设置
-                    ui.group(|ui| {
-                        ui.heading(i18n.get(I18nKey::Language));
-                        ui.separator();
+                egui::ScrollArea::vertical()
+                    .max_height(550.0)
+                    .show(ui, |ui| {
+                        ui.vertical(|ui| {
+                            // 语言设置
+                            ui.group(|ui| {
+                                ui.heading(i18n.get(I18nKey::Language));
+                                ui.separator();
 
-                        egui::ComboBox::from_label(i18n.get(I18nKey::Language))
-                            .selected_text(match self.temp_language {
-                                Language::Chinese => i18n.get(I18nKey::Chinese),
-                                Language::English => i18n.get(I18nKey::English),
-                            })
-                            .show_ui(ui, |ui| {
-                                if ui
-                                    .selectable_value(
-                                        &mut self.temp_language,
-                                        Language::Chinese,
-                                        i18n.get(I18nKey::Chinese),
-                                    )
-                                    .clicked()
-                                {
-                                    // 语言切换时立即更新界面
-                                }
-                                if ui
-                                    .selectable_value(
-                                        &mut self.temp_language,
-                                        Language::English,
-                                        i18n.get(I18nKey::English),
-                                    )
-                                    .clicked()
-                                {
-                                    // 语言切换时立即更新界面
-                                }
+                                egui::ComboBox::from_label(i18n.get(I18nKey::Language))
+                                    .selected_text(match self.temp_language {
+                                        Language::Chinese => i18n.get(I18nKey::Chinese),
+                                        Language::English => i18n.get(I18nKey::English),
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.temp_language,
+                                                Language::Chinese,
+                                                i18n.get(I18nKey::Chinese),
+                                            )
+                                            .clicked()
+                                        {
+                                            // 语言切换时立即更新界面
+                                        }
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.temp_language,
+                                                Language::English,
+                                                i18n.get(I18nKey::English),
+                                            )
+                                            .clicked()
+                                        {
+                                            // 语言切换时立即更新界面
+                                        }
+                                    });
                             });
-                    });
 
-                    ui.add_space(10.0);
+                            ui.add_space(10.0);
 
-                    // 外观设置
-                    ui.group(|ui| {
-                        ui.heading(i18n.get(I18nKey::Appearance));
-                        ui.separator();
+                            // 外观设置
+                            ui.group(|ui| {
+                                ui.heading(i18n.get(I18nKey::Appearance));
+                                ui.separator();
 
-                        egui::ComboBox::from_label(i18n.get(I18nKey::Theme))
-                            .selected_text(if self.temp_theme == "dark" {
-                                i18n.get(I18nKey::DarkTheme)
-                            } else {
-                                i18n.get(I18nKey::LightTheme)
-                            })
-                            .show_ui(ui, |ui| {
-                                if ui
-                                    .selectable_value(
-                                        &mut self.temp_theme,
-                                        "dark".to_string(),
-                                        i18n.get(I18nKey::DarkTheme),
-                                    )
-                                    .clicked()
-                                {
-                                    self.temp_settings.appearance.theme_mode = ThemeMode::Dark;
-                                    self.temp_settings.terminal.theme = "dark".to_string();
-                                }
-                                if ui
-                                    .selectable_value(
-                                        &mut self.temp_theme,
-                                        "light".to_string(),
-                                        i18n.get(I18nKey::LightTheme),
-                                    )
-                                    .clicked()
-                                {
-                                    self.temp_settings.appearance.theme_mode = ThemeMode::Light;
-                                    self.temp_settings.terminal.theme = "light".to_string();
-                                }
+                                egui::ComboBox::from_label(i18n.get(I18nKey::Theme))
+                                    .selected_text(match self.temp_theme.as_str() {
+                                        "dark" => i18n.get(I18nKey::DarkTheme),
+                                        "light" => i18n.get(I18nKey::LightTheme),
+                                        "custom" => i18n.get(I18nKey::CustomTheme),
+                                        _ => i18n.get(I18nKey::DarkTheme),
+                                    })
+                                    .show_ui(ui, |ui| {
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.temp_theme,
+                                                "dark".to_string(),
+                                                i18n.get(I18nKey::DarkTheme),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.temp_settings.appearance.theme_mode =
+                                                ThemeMode::Dark;
+                                            self.temp_settings.terminal.theme = "dark".to_string();
+                                        }
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.temp_theme,
+                                                "light".to_string(),
+                                                i18n.get(I18nKey::LightTheme),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.temp_settings.appearance.theme_mode =
+                                                ThemeMode::Light;
+                                            self.temp_settings.terminal.theme = "light".to_string();
+                                        }
+                                        if ui
+                                            .selectable_value(
+                                                &mut self.temp_theme,
+                                                "custom".to_string(),
+                                                i18n.get(I18nKey::CustomTheme),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.temp_settings.terminal.theme =
+                                                "custom".to_string();
+                                            // 初始化自定义主题
+                                            if self.temp_settings.terminal.custom_theme.is_none() {
+                                                self.temp_settings.terminal.custom_theme = Some(
+                                                    crate::config::settings::CustomTheme::default(),
+                                                );
+                                            }
+                                        }
+                                    });
                             });
-                    });
 
-                    ui.add_space(10.0);
+                            ui.add_space(10.0);
 
-                    // 终端设置
-                    ui.group(|ui| {
-                        ui.heading(i18n.get(I18nKey::TerminalSettings));
-                        ui.separator();
+                            // 终端设置
+                            ui.group(|ui| {
+                                ui.heading(i18n.get(I18nKey::TerminalSettings));
+                                ui.separator();
 
-                        ui.horizontal(|ui| {
-                            ui.label(i18n.get(I18nKey::FontSize));
+                                ui.horizontal(|ui| {
+                                    ui.label(i18n.get(I18nKey::FontSize));
 
-                            // 减少字体大小按钮
-                            if ui.button("−").clicked() {
-                                let current_size = self.temp_settings.terminal.font_size;
-                                if current_size > 8.0 {
-                                    self.temp_settings.terminal.font_size =
-                                        (current_size - 1.0).max(8.0);
-                                }
-                            }
+                                    // 减少字体大小按钮
+                                    if ui.button("−").clicked() {
+                                        let current_size = self.temp_settings.terminal.font_size;
+                                        if current_size > 8.0 {
+                                            self.temp_settings.terminal.font_size =
+                                                (current_size - 1.0).max(8.0);
+                                        }
+                                    }
 
-                            // 字体大小输入框
-                            ui.add(
-                                egui::DragValue::new(&mut self.temp_settings.terminal.font_size)
-                                    .speed(1.0)
-                                    .clamp_range(8.0..=32.0),
-                            );
+                                    // 字体大小输入框
+                                    ui.add(
+                                        egui::DragValue::new(
+                                            &mut self.temp_settings.terminal.font_size,
+                                        )
+                                        .speed(1.0)
+                                        .clamp_range(8.0..=32.0),
+                                    );
 
-                            // 增加字体大小按钮
-                            if ui.button("+").clicked() {
-                                let current_size = self.temp_settings.terminal.font_size;
-                                if current_size < 32.0 {
-                                    self.temp_settings.terminal.font_size =
-                                        (current_size + 1.0).min(32.0);
-                                }
-                            }
-                        });
+                                    // 增加字体大小按钮
+                                    if ui.button("+").clicked() {
+                                        let current_size = self.temp_settings.terminal.font_size;
+                                        if current_size < 32.0 {
+                                            self.temp_settings.terminal.font_size =
+                                                (current_size + 1.0).min(32.0);
+                                        }
+                                    }
+                                });
 
-                        ui.horizontal(|ui| {
-                            ui.label(i18n.get(I18nKey::FontFamily));
-                            ui.text_edit_singleline(&mut self.temp_settings.terminal.font_family);
-                        });
+                                ui.horizontal(|ui| {
+                                    ui.label(i18n.get(I18nKey::FontFamily));
+                                    ui.text_edit_singleline(
+                                        &mut self.temp_settings.terminal.font_family,
+                                    );
+                                });
 
-                        ui.checkbox(
-                            &mut self.temp_settings.terminal.cursor_blink,
-                            i18n.get(I18nKey::CursorBlink),
-                        );
-                    });
-
-                    ui.add_space(20.0);
-                    ui.separator();
-
-                    // 按钮区域
-                    ui.horizontal(|ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                            if ui.button(i18n.get(I18nKey::Cancel)).clicked() {
-                                self.show = false;
-                            }
-
-                            if ui.button(i18n.get(I18nKey::Save)).clicked() {
-                                // 应用设置
-                                self.temp_settings.appearance.language =
-                                    self.temp_language.to_str().to_string();
-                                // 主题由theme_mode控制，不需要单独设置
-
-                                // 调用回调函数通知设置变更
-                                on_settings_changed(
-                                    self.temp_settings.clone(),
-                                    self.temp_language.clone(),
+                                ui.checkbox(
+                                    &mut self.temp_settings.terminal.cursor_blink,
+                                    i18n.get(I18nKey::CursorBlink),
                                 );
 
-                                self.show = false;
-                            }
+                                // 如果选择了自定义主题，显示颜色选择器
+                                if self.temp_settings.terminal.theme == "custom" {
+                                    ui.add_space(10.0);
+                                    ui.separator();
+
+                                    ui.horizontal(|ui| {
+                                        ui.heading(i18n.get(I18nKey::CustomTheme));
+
+                                        // 配色方案预设
+                                        egui::ComboBox::from_id_salt("preset_selector")
+                                            .selected_text(i18n.get(I18nKey::SelectPreset))
+                                            .show_ui(ui, |ui| {
+                                                for (name, preset) in
+                                                    crate::config::settings::CustomTheme::presets()
+                                                {
+                                                    if ui.button(name).clicked() {
+                                                        if let Some(ref mut custom) =
+                                                            self.temp_settings.terminal.custom_theme
+                                                        {
+                                                            *custom = preset;
+                                                        }
+                                                    }
+                                                }
+                                            });
+                                    });
+
+                                    if let Some(ref mut custom_theme) =
+                                        self.temp_settings.terminal.custom_theme
+                                    {
+                                        // 基本颜色
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::ForegroundColor));
+                                            ui.text_edit_singleline(&mut custom_theme.foreground);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::BackgroundColor));
+                                            ui.text_edit_singleline(&mut custom_theme.background);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::CursorColor));
+                                            ui.text_edit_singleline(&mut custom_theme.cursor);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::SelectionColor));
+                                            ui.text_edit_singleline(&mut custom_theme.selection);
+                                        });
+
+                                        ui.add_space(10.0);
+                                        ui.separator();
+                                        ui.heading(i18n.get(I18nKey::StandardColors));
+
+                                        // 标准颜色
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Black));
+                                            ui.text_edit_singleline(&mut custom_theme.black);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Red));
+                                            ui.text_edit_singleline(&mut custom_theme.red);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Green));
+                                            ui.text_edit_singleline(&mut custom_theme.green);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Yellow));
+                                            ui.text_edit_singleline(&mut custom_theme.yellow);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Blue));
+                                            ui.text_edit_singleline(&mut custom_theme.blue);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Magenta));
+                                            ui.text_edit_singleline(&mut custom_theme.magenta);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::Cyan));
+                                            ui.text_edit_singleline(&mut custom_theme.cyan);
+                                        });
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(i18n.get(I18nKey::White));
+                                            ui.text_edit_singleline(&mut custom_theme.white);
+                                        });
+
+                                        ui.add_space(10.0);
+                                        ui.heading(i18n.get(I18nKey::BrightColors));
+
+                                        egui::Grid::new("bright_colors_grid")
+                                            .num_columns(2)
+                                            .spacing([10.0, 4.0])
+                                            .show(ui, |ui| {
+                                                ui.label("Black (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_black,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Red (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_red,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Green (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_green,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Yellow (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_yellow,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Blue (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_blue,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Magenta (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_magenta,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("Cyan (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_cyan,
+                                                );
+                                                ui.end_row();
+
+                                                ui.label("White (Bright)");
+                                                ui.text_edit_singleline(
+                                                    &mut custom_theme.bright_white,
+                                                );
+                                                ui.end_row();
+                                            });
+
+                                        ui.add_space(10.0);
+                                        if ui.button(i18n.get(I18nKey::ResetToDefault)).clicked() {
+                                            *custom_theme =
+                                                crate::config::settings::CustomTheme::default();
+                                        }
+                                    }
+                                }
+                            });
+
+                            ui.add_space(20.0);
+                            ui.separator();
+
+                            // 按钮区域
+                            ui.horizontal(|ui| {
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Min),
+                                    |ui| {
+                                        if ui.button(i18n.get(I18nKey::Cancel)).clicked() {
+                                            self.show = false;
+                                        }
+
+                                        if ui.button(i18n.get(I18nKey::Save)).clicked() {
+                                            // 应用设置
+                                            self.temp_settings.appearance.language =
+                                                self.temp_language.to_str().to_string();
+                                            // 主题由theme_mode控制，不需要单独设置
+
+                                            // 调用回调函数通知设置变更
+                                            on_settings_changed(
+                                                self.temp_settings.clone(),
+                                                self.temp_language.clone(),
+                                            );
+
+                                            self.show = false;
+                                        }
+                                    },
+                                );
+                            });
                         });
                     });
-                });
             });
     }
 }
@@ -366,7 +559,12 @@ pub struct App {
     /// 测试完成标志
     pub test_completed: Arc<AtomicBool>,
     /// 为每个会话维护的终端仿真器
-    pub terminal_emulators: std::collections::HashMap<String, TerminalEmulator>,
+    pub terminal_emulators: std::collections::HashMap<
+        String,
+        Box<dyn crate::terminal::emulator::TerminalEmulatorTrait>,
+    >,
+    /// 文本选择器
+    pub text_selector: TextSelector,
     /// 上次读取时间
     pub last_read_time: Option<std::time::Instant>,
     /// 关于对话框
@@ -379,6 +577,16 @@ pub struct App {
     pub test_connection_timeout: u64,
     /// 会话连接开始时间（用于超时检查）
     pub session_start_times: std::collections::HashMap<String, std::time::Instant>,
+    /// 导入配置对话框状态
+    pub show_import_dialog: bool,
+    /// 导出配置对话框状态
+    pub show_export_dialog: bool,
+    /// 导入配置文件路径
+    pub import_file_path: String,
+    /// 导出配置文件路径
+    pub export_file_path: String,
+    /// 导入模式：覆盖(true) 或 合并(false)
+    pub import_overwrite_mode: bool,
 }
 
 impl Default for App {
@@ -402,12 +610,18 @@ impl Default for App {
             shared_test_result: Arc::new(Mutex::new(None)),
             test_completed: Arc::new(AtomicBool::new(false)),
             terminal_emulators: std::collections::HashMap::new(),
+            text_selector: TextSelector::new(),
             last_read_time: None,
             about_dialog: AboutDialog::new(),
             settings_dialog: SettingsDialog::new(),
             connection_timeout: 30,
             test_connection_timeout: 10,
             session_start_times: std::collections::HashMap::new(),
+            show_import_dialog: false,
+            show_export_dialog: false,
+            import_file_path: String::new(),
+            export_file_path: String::new(),
+            import_overwrite_mode: true,
         };
 
         // 加载保存的应用状态
@@ -465,9 +679,13 @@ impl eframe::App for App {
         }
 
         // 应用主题色，确保手动切换主题能立即生效
-        let current_theme = self.settings.get_current_theme();
         let is_currently_dark = ctx.style().visuals.dark_mode;
-        let should_be_dark = current_theme == "dark";
+
+        let should_be_dark = match self.settings.appearance.theme_mode {
+            ThemeMode::Dark => true,
+            ThemeMode::Light => false,
+            ThemeMode::Auto => self.settings.appearance.system_theme == "dark",
+        };
 
         if is_currently_dark != should_be_dark {
             if should_be_dark {
@@ -526,245 +744,27 @@ impl eframe::App for App {
         self.about_dialog.ui(ctx, &self.i18n);
 
         // 渲染设置对话框
-        if self.settings_dialog.show {
-            egui::Window::new(self.i18n.get(I18nKey::SettingsTitle))
-                .default_width(600.0)
-                .default_height(500.0)
-                .collapsible(false)
-                .resizable(true)
-                .show(ctx, |ui| {
-                    ui.vertical(|ui| {
-                        // 语言设置
-                        ui.group(|ui| {
-                            ui.vertical(|ui| {
-                                ui.heading(self.i18n.get(I18nKey::Language));
-                                ui.separator();
+        let mut settings_to_apply = None;
+        let mut lang_to_apply = None;
 
-                                ui.horizontal(|ui| {
-                                    ui.label(self.i18n.get(I18nKey::Language));
-                                    egui::ComboBox::from_id_source("language_selector")
-                                        .selected_text(
-                                            match self.settings.appearance.language.as_str() {
-                                                "zh-CN" => self.i18n.get(I18nKey::Chinese),
-                                                "en" => self.i18n.get(I18nKey::English),
-                                                _ => self.i18n.get(I18nKey::Chinese),
-                                            },
-                                        )
-                                        .show_ui(ui, |ui| {
-                                            if ui
-                                                .selectable_label(
-                                                    self.settings.appearance.language == "zh-CN",
-                                                    self.i18n.get(I18nKey::Chinese),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.settings.appearance.language =
-                                                    "zh-CN".to_string();
-                                                self.i18n
-                                                    .set_language(crate::i18n::Language::Chinese);
-                                            }
-                                            if ui
-                                                .selectable_label(
-                                                    self.settings.appearance.language == "en",
-                                                    self.i18n.get(I18nKey::English),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.settings.appearance.language =
-                                                    "en".to_string();
-                                                self.i18n
-                                                    .set_language(crate::i18n::Language::English);
-                                            }
-                                        });
-                                });
-                            });
-                        });
+        self.settings_dialog
+            .ui(ctx, &self.i18n, |new_settings, new_lang| {
+                settings_to_apply = Some(new_settings);
+                lang_to_apply = Some(new_lang);
+            });
 
-                        ui.add_space(10.0);
+        if let (Some(s), Some(l)) = (settings_to_apply, lang_to_apply) {
+            self.apply_settings(s, l);
+        }
 
-                        // 外观设置
-                        ui.group(|ui| {
-                            ui.vertical(|ui| {
-                                ui.heading(self.i18n.get(I18nKey::Appearance));
-                                ui.separator();
+        // 渲染导入配置对话框
+        if self.show_import_dialog {
+            self.render_import_dialog(ctx);
+        }
 
-                                ui.horizontal(|ui| {
-                                    ui.label(self.i18n.get(I18nKey::Theme));
-                                    egui::ComboBox::from_id_source("theme_selector")
-                                        .selected_text(
-                                            self.settings.get_theme_mode_display(&self.i18n),
-                                        )
-                                        .show_ui(ui, |ui| {
-                                            if ui
-                                                .selectable_label(
-                                                    matches!(
-                                                        self.settings.appearance.theme_mode,
-                                                        ThemeMode::Auto
-                                                    ),
-                                                    self.i18n.get(I18nKey::AutoTheme),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.settings.appearance.theme_mode =
-                                                    ThemeMode::Auto;
-                                                self.settings.terminal.theme =
-                                                    self.settings.get_current_theme();
-                                            }
-                                            if ui
-                                                .selectable_label(
-                                                    matches!(
-                                                        self.settings.appearance.theme_mode,
-                                                        ThemeMode::Dark
-                                                    ),
-                                                    self.i18n.get(I18nKey::DarkTheme),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.settings.appearance.theme_mode =
-                                                    ThemeMode::Dark;
-                                                self.settings.terminal.theme =
-                                                    self.settings.get_current_theme();
-                                            }
-                                            if ui
-                                                .selectable_label(
-                                                    matches!(
-                                                        self.settings.appearance.theme_mode,
-                                                        ThemeMode::Light
-                                                    ),
-                                                    self.i18n.get(I18nKey::LightTheme),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.settings.appearance.theme_mode =
-                                                    ThemeMode::Light;
-                                                self.settings.terminal.theme =
-                                                    self.settings.get_current_theme();
-                                            }
-                                        });
-                                });
-
-                                // 显示当前系统主题状态
-                                if matches!(self.settings.appearance.theme_mode, ThemeMode::Auto) {
-                                    ui.horizontal(|ui| {
-                                        ui.label(self.i18n.get(I18nKey::CurrentSystemTheme));
-                                        ui.label(
-                                            match self.settings.appearance.system_theme.as_str() {
-                                                "dark" => self.i18n.get(I18nKey::DarkThemeName),
-                                                "light" => self.i18n.get(I18nKey::LightThemeName),
-                                                _ => self.i18n.get(I18nKey::Unknown),
-                                            },
-                                        );
-                                    });
-                                }
-                            });
-                        });
-
-                        ui.add_space(10.0);
-
-                        // 终端设置
-                        ui.group(|ui| {
-                            ui.vertical(|ui| {
-                                ui.heading(self.i18n.get(I18nKey::TerminalSettings));
-                                ui.separator();
-
-                                ui.horizontal(|ui| {
-                                    ui.label(self.i18n.get(I18nKey::FontSize));
-
-                                    // 减少字体大小按钮
-                                    if ui.button("−").clicked() {
-                                        let current_size = self.settings.terminal.font_size;
-                                        if current_size > 8.0 {
-                                            self.settings.terminal.font_size =
-                                                (current_size - 1.0).max(8.0);
-                                            // 立即保存设置
-                                            if let Err(e) = self.settings.save() {
-                                                eprintln!("保存设置失败: {}", e);
-                                            } else {
-                                                println!(
-                                                    "字体大小已更新: {}",
-                                                    self.settings.terminal.font_size
-                                                );
-                                            }
-                                        }
-                                    }
-
-                                    // 字体大小输入框
-                                    ui.add(
-                                        egui::DragValue::new(&mut self.settings.terminal.font_size)
-                                            .speed(1.0)
-                                            .clamp_range(8.0..=24.0)
-                                            .suffix("px"),
-                                    );
-
-                                    // 增加字体大小按钮
-                                    if ui.button("+").clicked() {
-                                        let current_size = self.settings.terminal.font_size;
-                                        if current_size < 24.0 {
-                                            self.settings.terminal.font_size =
-                                                (current_size + 1.0).min(24.0);
-                                            // 立即保存设置
-                                            if let Err(e) = self.settings.save() {
-                                                eprintln!("保存设置失败: {}", e);
-                                            } else {
-                                                println!(
-                                                    "字体大小已更新: {}",
-                                                    self.settings.terminal.font_size
-                                                );
-                                            }
-                                        }
-                                    }
-                                });
-
-                                ui.horizontal(|ui| {
-                                    ui.label(self.i18n.get(I18nKey::FontFamily));
-                                    ui.text_edit_singleline(
-                                        &mut self.settings.terminal.font_family,
-                                    );
-                                });
-
-                                ui.checkbox(
-                                    &mut self.settings.terminal.cursor_blink,
-                                    self.i18n.get(I18nKey::CursorBlink),
-                                );
-                            });
-                        });
-
-                        ui.add_space(20.0);
-                        ui.separator();
-
-                        // 按钮区域
-                        ui.horizontal(|ui| {
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                                if ui.button(self.i18n.get(I18nKey::Cancel)).clicked() {
-                                    self.settings_dialog.show = false;
-                                }
-
-                                if ui.button(self.i18n.get(I18nKey::Save)).clicked() {
-                                    // 保存设置
-                                    if let Err(e) = self.settings.save() {
-                                        eprintln!("保存设置失败: {}", e);
-                                    } else {
-                                        println!("设置已应用");
-                                        // 更新所有终端的主题
-                                        self.update_terminal_themes();
-                                    }
-                                }
-
-                                if ui.button(self.i18n.get(I18nKey::Ok)).clicked() {
-                                    // 保存设置并关闭
-                                    if let Err(e) = self.settings.save() {
-                                        eprintln!("保存设置失败: {}", e);
-                                    } else {
-                                        println!("设置已保存");
-                                        // 更新所有终端的主题
-                                        self.update_terminal_themes();
-                                    }
-                                    self.settings_dialog.show = false;
-                                }
-                            });
-                        });
-                    });
-                });
+        // 渲染导出配置对话框
+        if self.show_export_dialog {
+            self.render_export_dialog(ctx);
         }
 
         // 请求下一帧更新，但要控制频率
@@ -786,6 +786,25 @@ impl App {
                     self.show_connection_dialog = true;
                     ui.close();
                 }
+
+                if ui
+                    .button(self.i18n.get(I18nKey::MenuImportConfig))
+                    .clicked()
+                {
+                    self.show_import_dialog = true;
+                    ui.close();
+                }
+
+                if ui
+                    .button(self.i18n.get(I18nKey::MenuExportConfig))
+                    .clicked()
+                {
+                    self.show_export_dialog = true;
+                    ui.close();
+                }
+
+                ui.separator();
+
                 if ui.button(self.i18n.get(I18nKey::MenuExit)).clicked() {
                     std::process::exit(0);
                 }
@@ -1151,6 +1170,7 @@ impl App {
         if let Some(ref session_name) = self.current_session {
             if !self.terminal_emulators.contains_key(session_name) {
                 let mut emulator = TerminalEmulator::new(24, 80);
+                // WezTermAdapter::new(24, 80, crate::terminal::TerminalTheme::default());
 
                 // 设置终端事件回调
                 let session_name_clone = session_name.clone();
@@ -1167,7 +1187,7 @@ impl App {
                 });
 
                 self.terminal_emulators
-                    .insert(session_name.clone(), emulator);
+                    .insert(session_name.clone(), Box::new(emulator));
             }
         }
 
@@ -1236,10 +1256,71 @@ impl App {
                 if let Some(ref session_name) = self.current_session {
                     if let Some(ref mut emulator) = self.terminal_emulators.get_mut(session_name) {
                         // 更新仿真器中的主题信息
-                        let theme_style = if self.settings.get_current_theme() == "light" {
-                            crate::terminal::ThemeStyle::light()
-                        } else {
-                            crate::terminal::ThemeStyle::dark()
+                        let theme_style = match self.settings.get_current_theme().as_str() {
+                            "light" => crate::terminal::ThemeStyle::light(),
+                            "custom" => {
+                                if let Some(ref custom) = self.settings.terminal.custom_theme {
+                                    crate::terminal::ThemeStyle {
+                                        foreground: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.foreground,
+                                        ),
+                                        background: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.background,
+                                        ),
+                                        cursor: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.cursor,
+                                        ),
+                                        selection: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.selection,
+                                        ),
+                                        black: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.black,
+                                        ),
+                                        red: crate::terminal::ThemeStyle::parse_hex(&custom.red),
+                                        green: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.green,
+                                        ),
+                                        yellow: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.yellow,
+                                        ),
+                                        blue: crate::terminal::ThemeStyle::parse_hex(&custom.blue),
+                                        magenta: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.magenta,
+                                        ),
+                                        cyan: crate::terminal::ThemeStyle::parse_hex(&custom.cyan),
+                                        white: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.white,
+                                        ),
+                                        bright_black: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.bright_black,
+                                        ),
+                                        bright_red: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.bright_red,
+                                        ),
+                                        bright_green: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.bright_green,
+                                        ),
+                                        bright_yellow: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.bright_yellow,
+                                        ),
+                                        bright_blue: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.bright_blue,
+                                        ),
+                                        bright_magenta: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.bright_magenta,
+                                        ),
+                                        bright_cyan: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.bright_cyan,
+                                        ),
+                                        bright_white: crate::terminal::ThemeStyle::parse_hex(
+                                            &custom.bright_white,
+                                        ),
+                                    }
+                                } else {
+                                    crate::terminal::ThemeStyle::dark()
+                                }
+                            }
+                            _ => crate::terminal::ThemeStyle::dark(),
                         };
                         let theme = crate::terminal::TerminalTheme {
                             style: theme_style,
@@ -1277,48 +1358,80 @@ impl App {
                             emulator.resize(actual_rows.max(1), actual_cols.max(1));
                         }
 
+                        // 先获取缓冲区用于渲染
                         let buffer = emulator.buffer();
                         let mut renderer =
                             crate::terminal::TerminalRenderer::new(buffer.rows, buffer.cols, theme);
                         // 更新缓冲区内容
                         renderer.buffer = buffer;
 
-                        egui::Frame::canvas(ui.style())
+                        let response = egui::Frame::canvas(ui.style())
                             .inner_margin(0.0)
-                            .show(ui, |ui| {
-                                let response = renderer.render(ui);
+                            .show(ui, |ui| renderer.render(ui))
+                            .inner;
 
-                                if response.clicked() {
-                                    ui.memory_mut(|mem| mem.request_focus(response.id));
-                                }
+                        if response.clicked() {
+                            ui.memory_mut(|mem| mem.request_focus(response.id));
+                        }
 
-                                // 如果获得焦点，则处理输入和IME
-                                if response.has_focus() {
-                                    // 请求IME（输入法）支持，特别是中文输入
-                                    ui.ctx().output_mut(|o| {
-                                        // egui 0.33 IMEOutput 需要同时设置 rect 和 cursor_rect
-                                        o.ime = Some(egui::output::IMEOutput {
-                                            rect: response.rect,
-                                            cursor_rect: response.rect,
-                                        });
-                                    });
-                                    // 告诉egui不要处理这些按键，让它们传递给我们
-                                    ui.memory_mut(|mem| {
-                                        mem.set_focus_lock_filter(
-                                            response.id,
-                                            egui::EventFilter {
-                                                tab: true,
-                                                horizontal_arrows: true,
-                                                vertical_arrows: true,
-                                                escape: true,
-                                            },
-                                        );
-                                        // 注意：egui::EventFilter 不包含对 Ctrl 快捷键的过滤选项
-                                        // 因此我们需要在 handle_terminal_input 中通过 consume_key 来处理
-                                    });
-                                    self.handle_terminal_input(ui);
+                        // 处理鼠标选择
+                        if response.drag_started() {
+                            println!("检测到拖拽开始");
+                            if let Some(pos) = response.interact_pointer_pos() {
+                                println!("拖拽开始位置: ({}, {})", pos.x, pos.y);
+                                self.text_selector.start_selection(pos.x, pos.y);
+                            }
+                        }
+
+                        if response.dragged() {
+                            if let Some(pos) = response.interact_pointer_pos() {
+                                println!("拖拽中位置: ({}, {})", pos.x, pos.y);
+                                self.text_selector.update_selection(pos.x, pos.y);
+                                // 更新仿真器选择显示
+                                if let Some(emulator) =
+                                    self.terminal_emulators.get_mut(session_name)
+                                {
+                                    self.text_selector.update_emulator_selection(
+                                        emulator.as_mut(),
+                                        &response.rect,
+                                        char_size,
+                                        1.2, // 对应渲染时的 line_height
+                                    );
                                 }
+                            }
+                        }
+
+                        if response.drag_stopped() {
+                            println!("检测到拖拽结束");
+                            self.text_selector.end_selection();
+                        }
+
+                        // 如果获得焦点，则处理输入和IME
+                        if response.has_focus() {
+                            // 请求IME（输入法）支持，特别是中文输入
+                            ui.ctx().output_mut(|o| {
+                                // egui 0.33 IMEOutput 需要同时设置 rect 和 cursor_rect
+                                o.ime = Some(egui::output::IMEOutput {
+                                    rect: response.rect,
+                                    cursor_rect: response.rect,
+                                });
                             });
+                            // 告诉egui不要处理这些按键，让它们传递给我们
+                            ui.memory_mut(|mem| {
+                                mem.set_focus_lock_filter(
+                                    response.id,
+                                    egui::EventFilter {
+                                        tab: true,
+                                        horizontal_arrows: true,
+                                        vertical_arrows: true,
+                                        escape: true,
+                                    },
+                                );
+                                // 注意：egui::EventFilter 不包含对 Ctrl 快捷键的过滤选项
+                                // 因此我们需要在 handle_terminal_input 中通过 consume_key 来处理
+                            });
+                            self.handle_terminal_input(ui);
+                        }
                     }
                 }
             });
@@ -1331,63 +1444,153 @@ impl App {
         // 先检查 Context 级别的输入状态（在 egui 处理之前）
         let ctx = ui.ctx().clone();
 
-        // 手动检查 Ctrl 组合键的按下状态
-        ctx.input(|i| {
-            // 检查高层事件，egui 会将 Ctrl+C/X/V 等转换成这些事件
-            for event in &i.events {
-                match event {
-                    egui::Event::Copy => {
-                        println!("[DEBUG] 拦截 Copy 事件，发送 Ctrl+C (0x03)");
-                        input_to_send.push(0x03);
+        // 处理选择相关的键盘快捷键和高层事件
+        if let Some(ref session_name) = self.current_session {
+            if let Some(ref mut emulator) = self.terminal_emulators.get_mut(session_name) {
+                ctx.input_mut(|i| {
+                    // 复制操作 (Ctrl+C)
+                    if i.modifiers.ctrl && i.key_pressed(egui::Key::C) {
+                        if self.text_selector.state()
+                            != &crate::terminal::selection::SelectionState::None
+                        {
+                            if self.text_selector.copy_selected_text(emulator.as_ref()) {
+                                // 成功手动复制，消耗掉该按键
+                                i.consume_key(egui::Modifiers::CTRL, egui::Key::C);
+                                return;
+                            }
+                        }
                     }
-                    egui::Event::Cut => {
-                        println!("[DEBUG] 拦截 Cut 事件，发送 Ctrl+X (0x18)");
-                        input_to_send.push(0x18);
-                    }
-                    egui::Event::Paste(_) => {
-                        // Paste 事件应该粘贴内容，不是发送 Ctrl+V
-                        // 这里暂时不处理，让后续的 Text 事件处理
-                        println!("[DEBUG] 拦截 Paste 事件（暂不处理，等待 Text 事件）");
-                    }
-                    _ => {}
-                }
-            }
 
-            // 检查各个字母键是否被按下 (用于其他 Ctrl 组合键)
-            if i.modifiers.ctrl && input_to_send.is_empty() {
-                for (key_char, key_code, byte) in [
-                    ('A', egui::Key::A, 0x01),
-                    ('B', egui::Key::B, 0x02),
-                    ('D', egui::Key::D, 0x04),
-                    ('E', egui::Key::E, 0x05),
-                    ('F', egui::Key::F, 0x06),
-                    ('G', egui::Key::G, 0x07),
-                    ('H', egui::Key::H, 0x08),
-                    ('I', egui::Key::I, 0x09),
-                    ('J', egui::Key::J, 0x0A),
-                    ('K', egui::Key::K, 0x0B),
-                    ('L', egui::Key::L, 0x0C),
-                    ('M', egui::Key::M, 0x0D),
-                    ('N', egui::Key::N, 0x0E),
-                    ('O', egui::Key::O, 0x0F),
-                    ('P', egui::Key::P, 0x10),
-                    ('Q', egui::Key::Q, 0x11),
-                    ('R', egui::Key::R, 0x12),
-                    ('S', egui::Key::S, 0x13),
-                    ('T', egui::Key::T, 0x14),
-                    ('U', egui::Key::U, 0x15),
-                    ('W', egui::Key::W, 0x17),
-                    ('Y', egui::Key::Y, 0x19),
-                    ('Z', egui::Key::Z, 0x1A),
-                ] {
-                    if i.key_pressed(key_code) {
-                        println!("[DEBUG] Ctrl+{} 通过 key_pressed 检测到", key_char);
-                        input_to_send.push(byte);
-                        break;
+                    // 粘贴操作 (Ctrl+V)
+                    if i.modifiers.ctrl && i.key_pressed(egui::Key::V) {
+                        if let Some(text) = self.text_selector.get_clipboard_text() {
+                            println!(
+                                "[DEBUG] 手动通过 Ctrl+V 粘贴 (copypasta), 长度: {}",
+                                text.len()
+                            );
+                            input_to_send.extend_from_slice(text.as_bytes());
+                            // 消耗掉该按键，防止 egui_winit 产生错误
+                            i.consume_key(egui::Modifiers::CTRL, egui::Key::V);
+                            return;
+                        }
                     }
-                }
+
+                    // Ctrl+Shift+V
+                    if i.modifiers.ctrl && i.modifiers.shift && i.key_pressed(egui::Key::V) {
+                        if let Some(text) = self.text_selector.get_clipboard_text() {
+                            input_to_send.extend_from_slice(text.as_bytes());
+                            i.consume_key(
+                                egui::Modifiers::CTRL | egui::Modifiers::SHIFT,
+                                egui::Key::V,
+                            );
+                            return;
+                        }
+                    }
+
+                    for event in i.events.clone().iter() {
+                        match event {
+                            egui::Event::Key {
+                                key,
+                                pressed: true,
+                                modifiers,
+                                ..
+                            } => {
+                                if self.text_selector.handle_keyboard_shortcuts(
+                                    emulator.as_mut(),
+                                    key,
+                                    modifiers,
+                                ) {
+                                    // 快捷键已被处理，不需要继续传递
+                                    return;
+                                }
+                            }
+                            egui::Event::Copy => {
+                                if self.text_selector.state()
+                                    != &crate::terminal::selection::SelectionState::None
+                                {
+                                    if let Some(text) = self
+                                        .text_selector
+                                        .get_selected_text_content(emulator.as_ref())
+                                    {
+                                        // 使用 copypasta 设置系统剪贴板
+                                        let _ = self
+                                            .text_selector
+                                            .copy_selected_text(emulator.as_ref());
+                                        println!("已复制选中文本: {} 字符", text.len());
+                                        return;
+                                    }
+                                }
+                                println!("[DEBUG] 拦截 Copy 事件，发送 Ctrl+C (0x03)");
+                                input_to_send.push(0x03);
+                            }
+                            egui::Event::Cut => {
+                                if self.text_selector.state()
+                                    != &crate::terminal::selection::SelectionState::None
+                                {
+                                    if let Some(text) = self
+                                        .text_selector
+                                        .get_selected_text_content(emulator.as_ref())
+                                    {
+                                        let _ = self
+                                            .text_selector
+                                            .copy_selected_text(emulator.as_ref());
+                                        println!("已剪切选中文本（仅复制），{} 字符", text.len());
+                                        return;
+                                    }
+                                }
+                                println!("[DEBUG] 拦截 Cut 事件，发送 Ctrl+X (0x18)");
+                                input_to_send.push(0x18);
+                            }
+                            egui::Event::Paste(text) => {
+                                if !text.is_empty() {
+                                    input_to_send.extend_from_slice(text.as_bytes());
+                                } else if let Some(clipboard_text) =
+                                    self.text_selector.get_clipboard_text()
+                                {
+                                    input_to_send.extend_from_slice(clipboard_text.as_bytes());
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // 检查各个字母键是否被按下 (用于其他 Ctrl 组合键)
+                    if i.modifiers.ctrl && input_to_send.is_empty() {
+                        for (key_char, key_code, byte) in [
+                            ('A', egui::Key::A, 0x01),
+                            ('B', egui::Key::B, 0x02),
+                            ('D', egui::Key::D, 0x04),
+                            ('E', egui::Key::E, 0x05),
+                            ('F', egui::Key::F, 0x06),
+                            ('G', egui::Key::G, 0x07),
+                            ('H', egui::Key::H, 0x08),
+                            ('I', egui::Key::I, 0x09),
+                            ('J', egui::Key::J, 0x0A),
+                            ('K', egui::Key::K, 0x0B),
+                            ('L', egui::Key::L, 0x0C),
+                            ('M', egui::Key::M, 0x0D),
+                            ('N', egui::Key::N, 0x0E),
+                            ('O', egui::Key::O, 0x0F),
+                            ('P', egui::Key::P, 0x10),
+                            ('Q', egui::Key::Q, 0x11),
+                            ('R', egui::Key::R, 0x12),
+                            ('S', egui::Key::S, 0x13),
+                            ('T', egui::Key::T, 0x14),
+                            ('U', egui::Key::U, 0x15),
+                            ('W', egui::Key::W, 0x17),
+                            ('Y', egui::Key::Y, 0x19),
+                            ('Z', egui::Key::Z, 0x1A),
+                        ] {
+                            if i.key_pressed(key_code) {
+                                println!("[DEBUG] Ctrl+{} 通过 key_pressed 检测到", key_char);
+                                input_to_send.push(byte);
+                                break;
+                            }
+                        }
+                    }
+                });
             }
-        });
+        }
 
         // 使用 input_mut 以便能够消费事件
         ui.input_mut(|i| {
@@ -2363,6 +2566,7 @@ impl App {
 
         // 8. 初始化终端仿真器
         let mut emulator = TerminalEmulator::new(40, 120);
+        // let mut emulator = WezTermAdapter::new(40, 120, crate::terminal::TerminalTheme::default());
 
         // 设置终端事件回调
         let session_name_clone = session_name.clone();
@@ -2379,7 +2583,7 @@ impl App {
         });
 
         self.terminal_emulators
-            .insert(session_name.clone(), emulator);
+            .insert(session_name.clone(), Box::new(emulator));
 
         // 9. 记录连接开始时间（用于超时检查）
         let start_time = std::time::Instant::now();
@@ -2493,10 +2697,15 @@ impl App {
         // 更新设置
         self.settings = new_settings;
 
-        // 保存到文件
-        self.auto_save_state();
+        // 保存到文件 (AppSettings::save 已经在外部调用了，但 auto_save_state 也会处理)
+        if let Err(e) = self.settings.save() {
+            eprintln!("保存设置失败: {}", e);
+        } else {
+            println!("设置已保存并应用");
+        }
 
-        println!("设置已更新");
+        // 更新所有终端的主题
+        self.update_terminal_themes();
     }
 
     /// 格式化会话状态显示
@@ -2626,10 +2835,41 @@ impl App {
 
     /// 更新所有终端的主题
     fn update_terminal_themes(&mut self) {
-        let theme_style = if self.settings.get_current_theme() == "light" {
-            crate::terminal::ThemeStyle::light()
-        } else {
-            crate::terminal::ThemeStyle::dark()
+        let theme_style = match self.settings.get_current_theme().as_str() {
+            "light" => crate::terminal::ThemeStyle::light(),
+            "custom" => {
+                if let Some(ref custom) = self.settings.terminal.custom_theme {
+                    crate::terminal::ThemeStyle {
+                        foreground: crate::terminal::ThemeStyle::parse_hex(&custom.foreground),
+                        background: crate::terminal::ThemeStyle::parse_hex(&custom.background),
+                        cursor: crate::terminal::ThemeStyle::parse_hex(&custom.cursor),
+                        selection: crate::terminal::ThemeStyle::parse_hex(&custom.selection),
+                        black: crate::terminal::ThemeStyle::parse_hex(&custom.black),
+                        red: crate::terminal::ThemeStyle::parse_hex(&custom.red),
+                        green: crate::terminal::ThemeStyle::parse_hex(&custom.green),
+                        yellow: crate::terminal::ThemeStyle::parse_hex(&custom.yellow),
+                        blue: crate::terminal::ThemeStyle::parse_hex(&custom.blue),
+                        magenta: crate::terminal::ThemeStyle::parse_hex(&custom.magenta),
+                        cyan: crate::terminal::ThemeStyle::parse_hex(&custom.cyan),
+                        white: crate::terminal::ThemeStyle::parse_hex(&custom.white),
+                        bright_black: crate::terminal::ThemeStyle::parse_hex(&custom.bright_black),
+                        bright_red: crate::terminal::ThemeStyle::parse_hex(&custom.bright_red),
+                        bright_green: crate::terminal::ThemeStyle::parse_hex(&custom.bright_green),
+                        bright_yellow: crate::terminal::ThemeStyle::parse_hex(
+                            &custom.bright_yellow,
+                        ),
+                        bright_blue: crate::terminal::ThemeStyle::parse_hex(&custom.bright_blue),
+                        bright_magenta: crate::terminal::ThemeStyle::parse_hex(
+                            &custom.bright_magenta,
+                        ),
+                        bright_cyan: crate::terminal::ThemeStyle::parse_hex(&custom.bright_cyan),
+                        bright_white: crate::terminal::ThemeStyle::parse_hex(&custom.bright_white),
+                    }
+                } else {
+                    crate::terminal::ThemeStyle::dark()
+                }
+            }
+            _ => crate::terminal::ThemeStyle::dark(),
         };
         let theme = crate::terminal::TerminalTheme {
             style: theme_style,
@@ -2641,6 +2881,214 @@ impl App {
         // 更新所有已存在的终端仿真器主题
         for (_, emulator) in self.terminal_emulators.iter_mut() {
             emulator.update_theme(theme.clone());
+        }
+    }
+
+    /// 渲染导入配置对话框
+    fn render_import_dialog(&mut self, ctx: &egui::Context) {
+        egui::Window::new(self.i18n.get(I18nKey::MenuImportConfig))
+            .default_width(400.0)
+            .default_height(300.0)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                ui.vertical(|ui| {
+                    ui.label(self.i18n.get(I18nKey::SelectConfigFile));
+                    ui.text_edit_singleline(&mut self.import_file_path);
+
+                    if ui.button(self.i18n.get(I18nKey::Browse)).clicked() {
+                        // 打开文件选择对话框
+                        let dialog = rfd::FileDialog::new()
+                            .add_filter("JSON", &["json"])
+                            .add_filter("All files", &["*"]);
+
+                        if let Some(path) = dialog.pick_file() {
+                            self.import_file_path = path.to_string_lossy().to_string();
+                        }
+                    }
+
+                    ui.add_space(10.0);
+                    ui.separator();
+
+                    ui.label(self.i18n.get(I18nKey::ImportMode));
+                    ui.horizontal(|ui| {
+                        ui.radio_value(
+                            &mut self.import_overwrite_mode,
+                            true,
+                            self.i18n.get(I18nKey::MenuOverwrite),
+                        );
+                        ui.radio_value(
+                            &mut self.import_overwrite_mode,
+                            false,
+                            self.i18n.get(I18nKey::MenuMerge),
+                        );
+                    });
+
+                    ui.add_space(20.0);
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        if ui.button(self.i18n.get(I18nKey::Cancel)).clicked() {
+                            self.show_import_dialog = false;
+                            self.import_file_path.clear();
+                        }
+
+                        if ui.button(self.i18n.get(I18nKey::ImportButton)).clicked()
+                            && !self.import_file_path.is_empty()
+                        {
+                            self.import_config();
+                            self.show_import_dialog = false;
+                        }
+                    });
+                });
+            });
+    }
+
+    /// 渲染导出配置对话框
+    fn render_export_dialog(&mut self, ctx: &egui::Context) {
+        egui::Window::new(self.i18n.get(I18nKey::MenuExportConfig))
+            .default_width(400.0)
+            .default_height(250.0)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                ui.vertical(|ui| {
+                    ui.label(self.i18n.get(I18nKey::ExportPath));
+                    ui.text_edit_singleline(&mut self.export_file_path);
+
+                    if ui.button(self.i18n.get(I18nKey::Browse)).clicked() {
+                        // 打开文件保存对话框
+                        let dialog = rfd::FileDialog::new()
+                            .add_filter("JSON", &["json"])
+                            .add_filter("All files", &["*"])
+                            .set_file_name("config.json");
+
+                        if let Some(path) = dialog.save_file() {
+                            self.export_file_path = path.to_string_lossy().to_string();
+                        }
+                    }
+
+                    ui.add_space(20.0);
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        if ui.button(self.i18n.get(I18nKey::Cancel)).clicked() {
+                            self.show_export_dialog = false;
+                            self.export_file_path.clear();
+                        }
+
+                        if ui.button(self.i18n.get(I18nKey::ExportButton)).clicked()
+                            && !self.export_file_path.is_empty()
+                        {
+                            self.export_config();
+                            self.show_export_dialog = false;
+                        }
+                    });
+                });
+            });
+    }
+
+    /// 导入配置
+    fn import_config(&mut self) {
+        use serde_json;
+        use std::fs;
+
+        match fs::read_to_string(&self.import_file_path) {
+            Ok(content) => {
+                match serde_json::from_str::<AppSettings>(&content) {
+                    Ok(imported_settings) => {
+                        if self.import_overwrite_mode {
+                            // 覆盖模式：完全替换当前配置
+                            self.settings = imported_settings;
+                            self.connection_history = self.settings.connections.clone();
+                            self.connection_groups = self.settings.groups.clone();
+                            println!("配置导入成功（覆盖模式）");
+                        } else {
+                            // 合并模式：合并连接和分组信息
+                            self.merge_config(imported_settings);
+                            println!("配置导入成功（合并模式）");
+                        }
+
+                        // 保存配置
+                        if let Err(e) = self.settings.save() {
+                            eprintln!("保存配置失败: {}", e);
+                        } else {
+                            self.auto_save_state();
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("解析配置文件失败: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("读取配置文件失败: {}", e);
+            }
+        }
+    }
+
+    /// 合并配置
+    fn merge_config(&mut self, imported_settings: AppSettings) {
+        // 合并连接历史（避免重复）
+        for imported_conn in imported_settings.connections {
+            if !self
+                .connection_history
+                .iter()
+                .any(|c| c.name == imported_conn.name)
+            {
+                self.connection_history.push(imported_conn);
+            }
+        }
+
+        // 合并分组（避免重复）
+        for imported_group in imported_settings.groups {
+            if !self
+                .connection_groups
+                .iter()
+                .any(|g| g.name == imported_group.name)
+            {
+                self.connection_groups.push(imported_group);
+            } else {
+                // 如果分组已存在，合并连接列表
+                if let Some(existing_group) = self
+                    .connection_groups
+                    .iter_mut()
+                    .find(|g| g.name == imported_group.name)
+                {
+                    for conn_name in imported_group.connections {
+                        if !existing_group.connections.contains(&conn_name) {
+                            existing_group.connections.push(conn_name);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 更新设置中的连接和分组
+        self.settings.connections = self.connection_history.clone();
+        self.settings.groups = self.connection_groups.clone();
+    }
+
+    /// 导出配置
+    fn export_config(&self) {
+        use serde_json;
+        use std::fs;
+
+        // 创建要导出的设置副本
+        let mut export_settings = self.settings.clone();
+        export_settings.connections = self.connection_history.clone();
+        export_settings.groups = self.connection_groups.clone();
+
+        match serde_json::to_string_pretty(&export_settings) {
+            Ok(json_content) => match fs::write(&self.export_file_path, json_content) {
+                Ok(_) => {
+                    println!("配置导出成功: {}", self.export_file_path);
+                }
+                Err(e) => {
+                    eprintln!("写入配置文件失败: {}", e);
+                }
+            },
+            Err(e) => {
+                eprintln!("序列化配置失败: {}", e);
+            }
         }
     }
 }

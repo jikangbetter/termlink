@@ -43,6 +43,17 @@ pub enum I18nKey {
     MenuExit,
     MenuSettings,
     MenuAbout,
+    MenuImportConfig,
+    MenuExportConfig,
+    MenuOverwrite,
+    MenuMerge,
+    SelectConfigFile,
+    ExportPath,
+    ImportMode,
+    ImportButton,
+    ExportButton,
+    SelectPreset,
+    BrightColors,
 
     // 连接管理
     ConnectionManagement,
@@ -139,6 +150,23 @@ pub enum I18nKey {
     LightThemeName,
     Unknown,
 
+    // 自定义主题
+    CustomTheme,
+    ForegroundColor,
+    BackgroundColor,
+    CursorColor,
+    SelectionColor,
+    StandardColors,
+    ResetToDefault,
+    Black,
+    Red,
+    Green,
+    Yellow,
+    Blue,
+    Magenta,
+    Cyan,
+    White,
+
     // 分组功能
     NoGroup,
     SelectGroup,
@@ -200,6 +228,17 @@ impl I18nManager {
         zh_translations.insert(I18nKey::MenuExit, "退出");
         zh_translations.insert(I18nKey::MenuSettings, "设置");
         zh_translations.insert(I18nKey::MenuAbout, "关于");
+        zh_translations.insert(I18nKey::MenuImportConfig, "导入配置");
+        zh_translations.insert(I18nKey::MenuExportConfig, "导出配置");
+        zh_translations.insert(I18nKey::MenuOverwrite, "覆盖当前配置");
+        zh_translations.insert(I18nKey::MenuMerge, "合并到当前配置");
+        zh_translations.insert(I18nKey::SelectConfigFile, "选择配置文件:");
+        zh_translations.insert(I18nKey::ExportPath, "导出路径:");
+        zh_translations.insert(I18nKey::ImportMode, "导入模式:");
+        zh_translations.insert(I18nKey::ImportButton, "导入");
+        zh_translations.insert(I18nKey::ExportButton, "导出");
+        zh_translations.insert(I18nKey::SelectPreset, "选择配色方案预设");
+        zh_translations.insert(I18nKey::BrightColors, "明亮色");
 
         zh_translations.insert(I18nKey::ConnectionManagement, "连接管理");
         zh_translations.insert(I18nKey::NewConnection, "新建连接");
@@ -290,6 +329,23 @@ impl I18nManager {
         zh_translations.insert(I18nKey::LightThemeName, "浅色");
         zh_translations.insert(I18nKey::Unknown, "未知");
 
+        // 自定义主题
+        zh_translations.insert(I18nKey::CustomTheme, "自定义主题");
+        zh_translations.insert(I18nKey::ForegroundColor, "前景色");
+        zh_translations.insert(I18nKey::BackgroundColor, "背景色");
+        zh_translations.insert(I18nKey::CursorColor, "光标颜色");
+        zh_translations.insert(I18nKey::SelectionColor, "选择背景色");
+        zh_translations.insert(I18nKey::StandardColors, "标准颜色");
+        zh_translations.insert(I18nKey::ResetToDefault, "重置为默认");
+        zh_translations.insert(I18nKey::Black, "黑色");
+        zh_translations.insert(I18nKey::Red, "红色");
+        zh_translations.insert(I18nKey::Green, "绿色");
+        zh_translations.insert(I18nKey::Yellow, "黄色");
+        zh_translations.insert(I18nKey::Blue, "蓝色");
+        zh_translations.insert(I18nKey::Magenta, "品红色");
+        zh_translations.insert(I18nKey::Cyan, "青色");
+        zh_translations.insert(I18nKey::White, "白色");
+
         // 分组功能
         zh_translations.insert(I18nKey::NoGroup, "未分组");
         zh_translations.insert(I18nKey::SelectGroup, "选择分组");
@@ -330,6 +386,17 @@ impl I18nManager {
         en_translations.insert(I18nKey::MenuExit, "Exit");
         en_translations.insert(I18nKey::MenuSettings, "Settings");
         en_translations.insert(I18nKey::MenuAbout, "About");
+        en_translations.insert(I18nKey::MenuImportConfig, "Import Config");
+        en_translations.insert(I18nKey::MenuExportConfig, "Export Config");
+        en_translations.insert(I18nKey::MenuOverwrite, "Overwrite Current Config");
+        en_translations.insert(I18nKey::MenuMerge, "Merge into Current Config");
+        en_translations.insert(I18nKey::SelectConfigFile, "Select Config File:");
+        en_translations.insert(I18nKey::ExportPath, "Export Path:");
+        en_translations.insert(I18nKey::ImportMode, "Import Mode:");
+        en_translations.insert(I18nKey::ImportButton, "Import");
+        en_translations.insert(I18nKey::ExportButton, "Export");
+        en_translations.insert(I18nKey::SelectPreset, "Select Color Preset");
+        en_translations.insert(I18nKey::BrightColors, "Bright Colors");
 
         en_translations.insert(I18nKey::ConnectionManagement, "Connection Management");
         en_translations.insert(I18nKey::NewConnection, "New Connection");
@@ -419,6 +486,23 @@ impl I18nManager {
         en_translations.insert(I18nKey::DarkThemeName, "Dark");
         en_translations.insert(I18nKey::LightThemeName, "Light");
         en_translations.insert(I18nKey::Unknown, "Unknown");
+
+        // Custom theme
+        en_translations.insert(I18nKey::CustomTheme, "Custom Theme");
+        en_translations.insert(I18nKey::ForegroundColor, "Foreground Color");
+        en_translations.insert(I18nKey::BackgroundColor, "Background Color");
+        en_translations.insert(I18nKey::CursorColor, "Cursor Color");
+        en_translations.insert(I18nKey::SelectionColor, "Selection Background");
+        en_translations.insert(I18nKey::StandardColors, "Standard Colors");
+        en_translations.insert(I18nKey::ResetToDefault, "Reset to Default");
+        en_translations.insert(I18nKey::Black, "Black");
+        en_translations.insert(I18nKey::Red, "Red");
+        en_translations.insert(I18nKey::Green, "Green");
+        en_translations.insert(I18nKey::Yellow, "Yellow");
+        en_translations.insert(I18nKey::Blue, "Blue");
+        en_translations.insert(I18nKey::Magenta, "Magenta");
+        en_translations.insert(I18nKey::Cyan, "Cyan");
+        en_translations.insert(I18nKey::White, "White");
 
         // Group functionality
         en_translations.insert(I18nKey::NoGroup, "No Group");
