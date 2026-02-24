@@ -64,9 +64,9 @@ impl WezTermAdapter {
     fn handle_ansi_escape(&mut self, sequence: &str) {
         if sequence.starts_with("[") && sequence.ends_with("m") {
             // 处理SGR (Select Graphic Rendition) 序列
-            let params_str = &sequence[1..sequence.len()-1];
+            let params_str = &sequence[1..sequence.len() - 1];
             let params: Vec<&str> = params_str.split(';').collect();
-            
+
             if params.is_empty() || (params.len() == 1 && params[0].is_empty()) {
                 // 重置所有属性
                 self.current_fg = None;
@@ -74,7 +74,7 @@ impl WezTermAdapter {
                 self.bold = false;
                 return;
             }
-            
+
             let mut i = 0;
             while i < params.len() {
                 if let Ok(code) = params[i].parse::<u8>() {
@@ -84,39 +84,39 @@ impl WezTermAdapter {
                             self.current_fg = None;
                             self.current_bg = None;
                             self.bold = false;
-                        },
+                        }
                         1 => {
                             // 加粗
                             self.bold = true;
-                        },
+                        }
                         22 => {
                             // 取消加粗
                             self.bold = false;
-                        },
+                        }
                         30..=37 => {
                             // 前景色
                             self.current_fg = Some(code - 30);
-                        },
+                        }
                         39 => {
                             // 默认前景色
                             self.current_fg = None;
-                        },
+                        }
                         40..=47 => {
                             // 背景色
                             self.current_bg = Some(code - 40);
-                        },
+                        }
                         49 => {
                             // 默认背景色
                             self.current_bg = None;
-                        },
+                        }
                         90..=97 => {
                             // 亮前景色
                             self.current_fg = Some(code - 90 + 8);
-                        },
+                        }
                         100..=107 => {
                             // 亮背景色
                             self.current_bg = Some(code - 100 + 8);
-                        },
+                        }
                         _ => {}
                     }
                 }
@@ -124,7 +124,7 @@ impl WezTermAdapter {
             }
         }
     }
-    
+
     /// 使用文本更新终端缓冲区
     fn update_buffer_with_text(&mut self, text: &str) {
         for ch in text.chars() {
@@ -200,19 +200,20 @@ impl crate::terminal::emulator::TerminalEmulatorTrait for WezTermAdapter {
     fn process_input(&mut self, data: &[u8]) -> Result<()> {
         // 将输入数据转换为字符串
         let input_text = String::from_utf8_lossy(data);
-            
+
         // 识别并处理ANSI转义序列
         let mut chars = input_text.chars().peekable();
         let mut normal_text = String::new();
-            
+
         while let Some(ch) = chars.next() {
-            if ch == '\x1b' {  // ESC字符
+            if ch == '\x1b' {
+                // ESC字符
                 // 开始处理转义序列
                 if chars.peek() == Some(&'[') {
                     // CSI序列
                     chars.next(); // 跳过 '['
                     let mut sequence = String::from("[");
-                        
+
                     // 收集序列内容直到字母
                     while let Some(seq_char) = chars.next() {
                         sequence.push(seq_char);
@@ -220,12 +221,12 @@ impl crate::terminal::emulator::TerminalEmulatorTrait for WezTermAdapter {
                             break;
                         }
                     }
-                        
+
                     // 处理转义序列
                     if sequence.ends_with('m') {
                         self.handle_ansi_escape(&sequence);
                     }
-                        
+
                     // 将之前积累的普通文本添加到缓冲区
                     if !normal_text.is_empty() {
                         self.add_text_to_buffer(&normal_text);
@@ -239,54 +240,54 @@ impl crate::terminal::emulator::TerminalEmulatorTrait for WezTermAdapter {
                 normal_text.push(ch);
             }
         }
-            
+
         // 处理剩余的普通文本
         if !normal_text.is_empty() {
             self.add_text_to_buffer(&normal_text);
         }
-            
+
         // 将输入添加到输出缓冲区
         self.output_buffer.push_back(input_text.to_string());
-            
+
         // 限制缓冲区大小
         if self.output_buffer.len() > 100 {
             self.output_buffer.pop_front();
         }
-            
+
         // 发送输出事件
         self.send_event(TerminalEvent::Output(input_text.to_string()));
-            
+
         Ok(())
     }
-    
+
     /// 获取终端缓冲区
     fn buffer(&self) -> TerminalBuffer {
         self.buffer.clone()
     }
-    
+
     /// 设置终端大小
     fn resize(&mut self, rows: usize, cols: usize) {
         self.buffer.resize(rows, cols);
         self.send_event(TerminalEvent::Resize { rows, cols });
     }
-    
+
     /// 更新主题
     fn update_theme(&self, theme: TerminalTheme) {
         // 发送主题更新事件
         self.send_event(TerminalEvent::Output("主题已更新".to_string()));
         // 实际的主题更新逻辑可以在后续实现
     }
-    
+
     /// 获取终端状态
     fn state(&self) -> &TerminalState {
         &self.state
     }
-    
+
     /// 设置终端状态
     fn set_state(&mut self, state: TerminalState) {
         self.state = state;
     }
-    
+
     /// 清空终端
     fn clear(&mut self) {
         self.buffer.clear();
@@ -302,23 +303,23 @@ impl WezTermAdapter {
                 '\n' => {
                     // 换行处理
                     self.buffer.newline();
-                },
+                }
                 '\r' => {
                     // 回车处理
                     self.buffer.carriage_return();
-                },
+                }
                 '\t' => {
                     // 制表符处理
                     let current_col = self.buffer.cursor_col;
                     let next_tab_stop = ((current_col / 8) + 1) * 8;
                     let spaces_needed = next_tab_stop.min(self.buffer.cols) - current_col;
-                        
+
                     for _ in 0..spaces_needed {
                         if self.buffer.cursor_col < self.buffer.cols {
-                            if let Some(cell) = self.buffer.get_cell_mut(
-                                self.buffer.cursor_row, 
-                                self.buffer.cursor_col
-                            ) {
+                            if let Some(cell) = self
+                                .buffer
+                                .get_cell_mut(self.buffer.cursor_row, self.buffer.cursor_col)
+                            {
                                 cell.character = ' ';
                                 cell.fg_color = if let Some(fg_index) = self.current_fg {
                                     self.theme.get_color(fg_index, self.bold)
@@ -335,16 +336,16 @@ impl WezTermAdapter {
                             self.buffer.cursor_col += 1;
                         }
                     }
-                },
+                }
                 ch => {
                     // 普通字符处理
-                    if self.buffer.cursor_row < self.buffer.rows && 
-                       self.buffer.cursor_col < self.buffer.cols {
-                            
-                        if let Some(cell) = self.buffer.get_cell_mut(
-                            self.buffer.cursor_row, 
-                            self.buffer.cursor_col
-                        ) {
+                    if self.buffer.cursor_row < self.buffer.rows
+                        && self.buffer.cursor_col < self.buffer.cols
+                    {
+                        if let Some(cell) = self
+                            .buffer
+                            .get_cell_mut(self.buffer.cursor_row, self.buffer.cursor_col)
+                        {
                             cell.character = ch;
                             // 设置前景色
                             cell.fg_color = if let Some(fg_index) = self.current_fg {
@@ -361,9 +362,9 @@ impl WezTermAdapter {
                             // 设置样式
                             cell.bold = self.bold;
                         }
-                            
+
                         self.buffer.cursor_col += 1;
-                            
+
                         // 如果到达行尾，自动换行
                         if self.buffer.cursor_col >= self.buffer.cols {
                             self.buffer.newline();
@@ -408,8 +409,6 @@ impl WezTermAdapter {
         self.buffer.clear();
         self.output_buffer.clear();
     }
-    
-
 }
 
 impl WezTermAdapter {
@@ -471,48 +470,48 @@ mod tests {
     fn test_cursor_position() {
         let theme = TerminalTheme::default();
         let mut adapter = WezTermAdapter::new(24, 80, theme);
-            
+
         // 初始位置应该是(0,0)
         let (row, col) = adapter.get_cursor_position();
         assert_eq!(row, 0);
         assert_eq!(col, 0);
-            
+
         // 处理一些字符
         adapter.process_input(b"Hello").unwrap();
         let (row, col) = adapter.get_cursor_position();
         assert_eq!(row, 0);
         assert_eq!(col, 5);
-            
+
         // 换行测试
         adapter.process_input(b"\n").unwrap();
         let (row, col) = adapter.get_cursor_position();
         assert_eq!(row, 1);
         assert_eq!(col, 0);
     }
-        
+
     #[test]
     fn test_ansi_color_processing() {
         let theme = TerminalTheme::default();
         let default_fg = theme.style.foreground;
         let mut adapter = WezTermAdapter::new(24, 80, theme);
-            
+
         // 测试红色前景色
         adapter.process_input(b"\x1b[31mRed Text").unwrap();
         let buffer = adapter.buffer();
-            
+
         // 检查第一个字符是否使用了红色
         if let Some(cell) = buffer.get_cell(0, 0) {
             assert_eq!(cell.character, 'R');
             // 颜色应该不是默认的白色
             assert_ne!(cell.fg_color, default_fg);
         }
-            
+
         // 测试重置颜色
         adapter.process_input(b"\x1b[0mNormal Text").unwrap();
         let buffer = adapter.buffer();
-            
+
         // 检查重置后的字符是否使用默认颜色
-        let normal_start_col = 8; 
+        let normal_start_col = 8;
         if let Some(cell) = buffer.get_cell(0, normal_start_col) {
             assert_eq!(cell.character, 'N');
             // 颜色应该回到默认
