@@ -43,6 +43,10 @@ pub enum I18nKey {
     MenuExit,
     MenuSettings,
     MenuAbout,
+    MenuImportConfig,
+    MenuExportConfig,
+    MenuOverwrite,
+    MenuMerge,
 
     // 连接管理
     ConnectionManagement,
@@ -217,6 +221,10 @@ impl I18nManager {
         zh_translations.insert(I18nKey::MenuExit, "退出");
         zh_translations.insert(I18nKey::MenuSettings, "设置");
         zh_translations.insert(I18nKey::MenuAbout, "关于");
+        zh_translations.insert(I18nKey::MenuImportConfig, "导入配置");
+        zh_translations.insert(I18nKey::MenuExportConfig, "导出配置");
+        zh_translations.insert(I18nKey::MenuOverwrite, "覆盖当前配置");
+        zh_translations.insert(I18nKey::MenuMerge, "合并到当前配置");
 
         zh_translations.insert(I18nKey::ConnectionManagement, "连接管理");
         zh_translations.insert(I18nKey::NewConnection, "新建连接");
@@ -364,6 +372,10 @@ impl I18nManager {
         en_translations.insert(I18nKey::MenuExit, "Exit");
         en_translations.insert(I18nKey::MenuSettings, "Settings");
         en_translations.insert(I18nKey::MenuAbout, "About");
+        en_translations.insert(I18nKey::MenuImportConfig, "Import Config");
+        en_translations.insert(I18nKey::MenuExportConfig, "Export Config");
+        en_translations.insert(I18nKey::MenuOverwrite, "Overwrite Current Config");
+        en_translations.insert(I18nKey::MenuMerge, "Merge into Current Config");
 
         en_translations.insert(I18nKey::ConnectionManagement, "Connection Management");
         en_translations.insert(I18nKey::NewConnection, "New Connection");
