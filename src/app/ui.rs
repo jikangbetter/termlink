@@ -7,6 +7,8 @@ use crate::config::{AppSettings, ConnectionConfig};
 use crate::i18n::{I18nKey, I18nManager, Language};
 use crate::ssh::{ConnectionManager, ConnectionTestResult, SessionState, SshSession};
 use crate::terminal::TerminalEmulator;
+// use crate::terminal::TerminalEmulator; // 已切换到WezTermAdapter
+use crate::terminal::WezTermAdapter;
 use eframe::egui;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -366,7 +368,10 @@ pub struct App {
     /// 测试完成标志
     pub test_completed: Arc<AtomicBool>,
     /// 为每个会话维护的终端仿真器
-    pub terminal_emulators: std::collections::HashMap<String, TerminalEmulator>,
+    pub terminal_emulators: std::collections::HashMap<
+        String,
+        Box<dyn crate::terminal::emulator::TerminalEmulatorTrait>,
+    >,
     /// 上次读取时间
     pub last_read_time: Option<std::time::Instant>,
     /// 关于对话框
@@ -1150,7 +1155,9 @@ impl App {
         // 确保当前会话有对应的终端仿真器
         if let Some(ref session_name) = self.current_session {
             if !self.terminal_emulators.contains_key(session_name) {
-                let mut emulator = TerminalEmulator::new(24, 80);
+                let mut emulator =
+                    TerminalEmulator::new(24, 80);
+                    // WezTermAdapter::new(24, 80, crate::terminal::TerminalTheme::default());
 
                 // 设置终端事件回调
                 let session_name_clone = session_name.clone();
@@ -1167,7 +1174,7 @@ impl App {
                 });
 
                 self.terminal_emulators
-                    .insert(session_name.clone(), emulator);
+                    .insert(session_name.clone(), Box::new(emulator));
             }
         }
 
@@ -2363,6 +2370,7 @@ impl App {
 
         // 8. 初始化终端仿真器
         let mut emulator = TerminalEmulator::new(40, 120);
+        // let mut emulator = WezTermAdapter::new(40, 120, crate::terminal::TerminalTheme::default());
 
         // 设置终端事件回调
         let session_name_clone = session_name.clone();
@@ -2379,7 +2387,7 @@ impl App {
         });
 
         self.terminal_emulators
-            .insert(session_name.clone(), emulator);
+            .insert(session_name.clone(), Box::new(emulator));
 
         // 9. 记录连接开始时间（用于超时检查）
         let start_time = std::time::Instant::now();

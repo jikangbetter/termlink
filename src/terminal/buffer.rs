@@ -129,6 +129,8 @@ impl TerminalBuffer {
             self.cells.drain(0..self.cols);
             self.cells.extend(vec![TerminalCell::default(); self.cols]);
         }
+        // 重置光标列到行首
+        self.cursor_col = 0;
     }
 
     pub fn carriage_return(&mut self) {

@@ -30,6 +30,30 @@ pub enum TerminalState {
     Error(String),
 }
 
+/// 终端仿真器trait
+pub trait TerminalEmulatorTrait {
+    /// 处理输入数据
+    fn process_input(&mut self, data: &[u8]) -> anyhow::Result<()>;
+
+    /// 获取终端缓冲区
+    fn buffer(&self) -> TerminalBuffer;
+
+    /// 调整终端大小
+    fn resize(&mut self, rows: usize, cols: usize);
+
+    /// 更新主题
+    fn update_theme(&self, theme: TerminalTheme);
+
+    /// 获取终端状态
+    fn state(&self) -> &TerminalState;
+
+    /// 设置终端状态
+    fn set_state(&mut self, state: TerminalState);
+
+    /// 清空终端
+    fn clear(&mut self);
+}
+
 /// VTE性能实现
 struct VtePerform {
     /// 终端缓冲区
@@ -334,6 +358,43 @@ pub struct TerminalEmulator {
     performer: Arc<Mutex<VtePerform>>,
     /// 终端状态
     state: TerminalState,
+}
+
+impl TerminalEmulatorTrait for TerminalEmulator {
+    fn process_input(&mut self, data: &[u8]) -> anyhow::Result<()> {
+        let mut performer = self.performer.lock().unwrap();
+        self.parser.advance(&mut *performer, data);
+        Ok(())
+    }
+
+    fn buffer(&self) -> TerminalBuffer {
+        self.performer.lock().unwrap().term_buffer.clone()
+    }
+
+    fn resize(&mut self, rows: usize, cols: usize) {
+        // 调整大小的实现
+        let mut performer = self.performer.lock().unwrap();
+        performer.term_buffer.resize(rows, cols);
+    }
+
+    fn update_theme(&self, theme: TerminalTheme) {
+        let mut performer = self.performer.lock().unwrap();
+        performer.theme = theme;
+    }
+
+    fn state(&self) -> &TerminalState {
+        &self.state
+    }
+
+    fn set_state(&mut self, state: TerminalState) {
+        self.state = state;
+    }
+
+    fn clear(&mut self) {
+        let mut perf = self.performer.lock().unwrap();
+        perf.term_buffer.clear();
+        perf.buffer.clear();
+    }
 }
 
 impl TerminalEmulator {
