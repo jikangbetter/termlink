@@ -51,6 +51,166 @@ pub struct ConnectionGroup {
     pub connections: Vec<String>, // 连接名称列表
 }
 
+/// 自定义主题颜色配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomTheme {
+    pub foreground: String, // 前景色 (RGB格式: "#RRGGBB")
+    pub background: String, // 背景色
+    pub cursor: String,     // 光标颜色
+    pub selection: String,  // 选择背景色
+    pub black: String,
+    pub red: String,
+    pub green: String,
+    pub yellow: String,
+    pub blue: String,
+    pub magenta: String,
+    pub cyan: String,
+    pub white: String,
+    pub bright_black: String,
+    pub bright_red: String,
+    pub bright_green: String,
+    pub bright_yellow: String,
+    pub bright_blue: String,
+    pub bright_magenta: String,
+    pub bright_cyan: String,
+    pub bright_white: String,
+}
+
+impl CustomTheme {
+    /// 获取内置配色预设
+    pub fn presets() -> Vec<(&'static str, Self)> {
+        vec![
+            (
+                "Solarized Dark",
+                Self {
+                    foreground: "#839496".to_string(),
+                    background: "#002B36".to_string(),
+                    cursor: "#93A1A1".to_string(),
+                    selection: "#073642B4".to_string(),
+                    black: "#073642".to_string(),
+                    red: "#DC322F".to_string(),
+                    green: "#859900".to_string(),
+                    yellow: "#B58900".to_string(),
+                    blue: "#268BD2".to_string(),
+                    magenta: "#D33682".to_string(),
+                    cyan: "#2AA198".to_string(),
+                    white: "#EEE8D5".to_string(),
+                    bright_black: "#002B36".to_string(),
+                    bright_red: "#CB4B16".to_string(),
+                    bright_green: "#586E75".to_string(),
+                    bright_yellow: "#657B83".to_string(),
+                    bright_blue: "#839496".to_string(),
+                    bright_magenta: "#6C71C4".to_string(),
+                    bright_cyan: "#93A1A1".to_string(),
+                    bright_white: "#FDF6E3".to_string(),
+                },
+            ),
+            (
+                "Monokai",
+                Self {
+                    foreground: "#F8F8F2".to_string(),
+                    background: "#272822".to_string(),
+                    cursor: "#F8F8F2".to_string(),
+                    selection: "#49483EB4".to_string(),
+                    black: "#272822".to_string(),
+                    red: "#F92672".to_string(),
+                    green: "#A6E22E".to_string(),
+                    yellow: "#E6DB74".to_string(),
+                    blue: "#66D9EF".to_string(),
+                    magenta: "#AE81FF".to_string(),
+                    cyan: "#A1EFE4".to_string(),
+                    white: "#F8F8F2".to_string(),
+                    bright_black: "#75715E".to_string(),
+                    bright_red: "#F92672".to_string(),
+                    bright_green: "#A6E22E".to_string(),
+                    bright_yellow: "#E6DB74".to_string(),
+                    bright_blue: "#66D9EF".to_string(),
+                    bright_magenta: "#AE81FF".to_string(),
+                    bright_cyan: "#A1EFE4".to_string(),
+                    bright_white: "#F8F8F2".to_string(),
+                },
+            ),
+            (
+                "Nord",
+                Self {
+                    foreground: "#D8DEE9".to_string(),
+                    background: "#2E3440".to_string(),
+                    cursor: "#D8DEE9".to_string(),
+                    selection: "#434C5EB4".to_string(),
+                    black: "#3B4252".to_string(),
+                    red: "#BF616A".to_string(),
+                    green: "#A3BE8C".to_string(),
+                    yellow: "#EBCB8B".to_string(),
+                    blue: "#81A1C1".to_string(),
+                    magenta: "#B48EAD".to_string(),
+                    cyan: "#88C0D0".to_string(),
+                    white: "#E5E9F0".to_string(),
+                    bright_black: "#4C566A".to_string(),
+                    bright_red: "#BF616A".to_string(),
+                    bright_green: "#A3BE8C".to_string(),
+                    bright_yellow: "#EBCB8B".to_string(),
+                    bright_blue: "#81A1C1".to_string(),
+                    bright_magenta: "#B48EAD".to_string(),
+                    bright_cyan: "#8FBCBB".to_string(),
+                    bright_white: "#ECEFF4".to_string(),
+                },
+            ),
+            (
+                "One Half Dark",
+                Self {
+                    foreground: "#DCDFE4".to_string(),
+                    background: "#282C34".to_string(),
+                    cursor: "#A3B3CC".to_string(),
+                    selection: "#474E5DB4".to_string(),
+                    black: "#282C34".to_string(),
+                    red: "#E06C75".to_string(),
+                    green: "#98C379".to_string(),
+                    yellow: "#E5C07B".to_string(),
+                    blue: "#61AFEF".to_string(),
+                    magenta: "#C678DD".to_string(),
+                    cyan: "#56B6C2".to_string(),
+                    white: "#DCDFE4".to_string(),
+                    bright_black: "#5C6370".to_string(),
+                    bright_red: "#E06C75".to_string(),
+                    bright_green: "#98C379".to_string(),
+                    bright_yellow: "#E5C07B".to_string(),
+                    bright_blue: "#61AFEF".to_string(),
+                    bright_magenta: "#C678DD".to_string(),
+                    bright_cyan: "#56B6C2".to_string(),
+                    bright_white: "#DCDFE4".to_string(),
+                },
+            ),
+        ]
+    }
+}
+
+impl Default for CustomTheme {
+    fn default() -> Self {
+        Self {
+            foreground: "#FFFFFF".to_string(),
+            background: "#0F0F0F".to_string(),
+            cursor: "#FFFFFF".to_string(),
+            selection: "#6495EDB4".to_string(), // 带alpha的蓝色
+            black: "#000000".to_string(),
+            red: "#CD3131".to_string(),
+            green: "#0DBC79".to_string(),
+            yellow: "#E5E510".to_string(),
+            blue: "#2472C8".to_string(),
+            magenta: "#BC3FBC".to_string(),
+            cyan: "#11A8CD".to_string(),
+            white: "#E5E5E5".to_string(),
+            bright_black: "#666666".to_string(),
+            bright_red: "#F14C4C".to_string(),
+            bright_green: "#23D18B".to_string(),
+            bright_yellow: "#F5F543".to_string(),
+            bright_blue: "#3B8EEA".to_string(),
+            bright_magenta: "#D670D6".to_string(),
+            bright_cyan: "#29B8DB".to_string(),
+            bright_white: "#E5E5E5".to_string(),
+        }
+    }
+}
+
 /// 终端设置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalSettings {
@@ -58,6 +218,8 @@ pub struct TerminalSettings {
     pub font_family: String,
     pub theme: String,
     pub cursor_blink: bool,
+    /// 自定义主题颜色配置
+    pub custom_theme: Option<CustomTheme>,
 }
 
 /// 主题模式
@@ -104,6 +266,7 @@ impl Default for AppSettings {
                 font_family: "Consolas".to_string(),
                 theme: "dark".to_string(),
                 cursor_blink: true,
+                custom_theme: None,
             },
             appearance: AppearanceSettings {
                 theme_mode: ThemeMode::Auto,
@@ -217,6 +380,9 @@ impl AppSettings {
 
     /// 获取当前应使用的主题
     pub fn get_current_theme(&self) -> String {
+        if self.terminal.theme == "custom" {
+            return "custom".to_string();
+        }
         match self.appearance.theme_mode {
             ThemeMode::Auto => self.appearance.system_theme.clone(),
             ThemeMode::Dark => "dark".to_string(),

@@ -1,12 +1,11 @@
 //! WezTerm终端仿真器适配器
 //! 将WezTerm的终端仿真能力集成到项目中
 
-use crate::terminal::buffer::{TerminalBuffer, TerminalCell};
+use crate::terminal::buffer::TerminalBuffer;
 use crate::terminal::emulator::{TerminalEvent, TerminalState};
 use crate::terminal::theme::TerminalTheme;
 use anyhow::Result;
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
 
 /// WezTerm终端仿真器适配器
 pub struct WezTermAdapter {
@@ -292,6 +291,22 @@ impl crate::terminal::emulator::TerminalEmulatorTrait for WezTermAdapter {
     fn clear(&mut self) {
         self.buffer.clear();
         self.output_buffer.clear();
+    }
+
+    fn start_selection(&mut self, row: usize, col: usize) {
+        self.buffer.start_selection(row, col);
+    }
+
+    fn update_selection(&mut self, row: usize, col: usize) {
+        self.buffer.update_selection(row, col);
+    }
+
+    fn clear_selection(&mut self) {
+        self.buffer.clear_selection();
+    }
+
+    fn get_selected_text(&self) -> Option<String> {
+        self.buffer.get_selected_text()
     }
 }
 

@@ -80,10 +80,19 @@ impl TerminalRenderer {
                         let width = crate::utils::helpers::get_char_width(cell.character);
                         let char_pos = egui::pos2(rect.min.x + col as f32 * char_size.x, row_pos_y);
 
-                        // 绘制背景
-                        if cell.bg_color != egui::Color32::TRANSPARENT
+                        // 绘制背景（包括选中状态）
+                        let bg_color = if cell.is_selected {
+                            // 选中状态的背景色
+                            self.theme.style.selection
+                        } else if cell.bg_color != egui::Color32::TRANSPARENT
                             && cell.bg_color != self.theme.style.background
                         {
+                            cell.bg_color
+                        } else {
+                            self.theme.style.background
+                        };
+
+                        if bg_color != self.theme.style.background {
                             let bg_rect = egui::Rect::from_min_size(
                                 char_pos,
                                 egui::vec2(
@@ -91,7 +100,7 @@ impl TerminalRenderer {
                                     char_size.y * self.theme.line_height,
                                 ),
                             );
-                            painter.rect_filled(bg_rect, 0.0, cell.bg_color);
+                            painter.rect_filled(bg_rect, 0.0, bg_color);
                         }
 
                         // 绘制文字
@@ -136,9 +145,19 @@ impl TerminalRenderer {
                         let width = crate::utils::helpers::get_char_width(cell.character);
                         let char_pos = egui::pos2(rect.min.x + col as f32 * char_size.x, row_pos_y);
 
-                        if cell.bg_color != egui::Color32::TRANSPARENT
+                        // 绘制背景（包括选中状态）
+                        let bg_color = if cell.is_selected {
+                            // 选中状态的背景色
+                            self.theme.style.selection
+                        } else if cell.bg_color != egui::Color32::TRANSPARENT
                             && cell.bg_color != self.theme.style.background
                         {
+                            cell.bg_color
+                        } else {
+                            self.theme.style.background
+                        };
+
+                        if bg_color != self.theme.style.background {
                             let bg_rect = egui::Rect::from_min_size(
                                 char_pos,
                                 egui::vec2(
@@ -146,7 +165,7 @@ impl TerminalRenderer {
                                     char_size.y * self.theme.line_height,
                                 ),
                             );
-                            painter.rect_filled(bg_rect, 0.0, cell.bg_color);
+                            painter.rect_filled(bg_rect, 0.0, bg_color);
                         }
 
                         if cell.character != ' ' {
