@@ -8,6 +8,7 @@ use crate::i18n::{I18nKey, I18nManager, Language};
 use crate::ssh::{ConnectionManager, ConnectionTestResult, SessionState, SshSession};
 use crate::terminal::TerminalEmulator;
 use eframe::egui;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 // 获取构建时信息
@@ -259,11 +260,31 @@ impl SettingsDialog {
 
                         ui.horizontal(|ui| {
                             ui.label(i18n.get(I18nKey::FontSize));
+
+                            // 减少字体大小按钮
+                            if ui.button("−").clicked() {
+                                let current_size = self.temp_settings.terminal.font_size;
+                                if current_size > 8.0 {
+                                    self.temp_settings.terminal.font_size =
+                                        (current_size - 1.0).max(8.0);
+                                }
+                            }
+
+                            // 字体大小输入框
                             ui.add(
                                 egui::DragValue::new(&mut self.temp_settings.terminal.font_size)
                                     .speed(1.0)
                                     .clamp_range(8.0..=32.0),
                             );
+
+                            // 增加字体大小按钮
+                            if ui.button("+").clicked() {
+                                let current_size = self.temp_settings.terminal.font_size;
+                                if current_size < 32.0 {
+                                    self.temp_settings.terminal.font_size =
+                                        (current_size + 1.0).min(32.0);
+                                }
+                            }
                         });
 
                         ui.horizontal(|ui| {
@@ -338,6 +359,12 @@ pub struct App {
     pub group_form: GroupForm,
     /// 连接测试结果
     pub test_result: Option<ConnectionTestResult>,
+    /// 是否正在测试连接
+    pub is_testing_connection: bool,
+    /// 共享的测试结果（用于线程间通信）
+    pub shared_test_result: Arc<Mutex<Option<ConnectionTestResult>>>,
+    /// 测试完成标志
+    pub test_completed: Arc<AtomicBool>,
     /// 为每个会话维护的终端仿真器
     pub terminal_emulators: std::collections::HashMap<String, TerminalEmulator>,
     /// 上次读取时间
@@ -346,6 +373,12 @@ pub struct App {
     pub about_dialog: AboutDialog,
     /// 设置对话框
     pub settings_dialog: SettingsDialog,
+    /// 连接超时时间（秒）
+    pub connection_timeout: u64,
+    /// 测试连接超时时间（秒）
+    pub test_connection_timeout: u64,
+    /// 会话连接开始时间（用于超时检查）
+    pub session_start_times: std::collections::HashMap<String, std::time::Instant>,
 }
 
 impl Default for App {
@@ -365,10 +398,16 @@ impl Default for App {
             show_group_view: false,
             group_form: GroupForm::default(),
             test_result: None,
+            is_testing_connection: false,
+            shared_test_result: Arc::new(Mutex::new(None)),
+            test_completed: Arc::new(AtomicBool::new(false)),
             terminal_emulators: std::collections::HashMap::new(),
             last_read_time: None,
             about_dialog: AboutDialog::new(),
             settings_dialog: SettingsDialog::new(),
+            connection_timeout: 30,
+            test_connection_timeout: 10,
+            session_start_times: std::collections::HashMap::new(),
         };
 
         // 加载保存的应用状态
@@ -440,6 +479,20 @@ impl eframe::App for App {
 
         // 添加调试信息
         // println!("Update called at {:?}", std::time::Instant::now());
+
+        // 检查测试连接结果
+        if self.test_completed.load(Ordering::Relaxed) {
+            if let Ok(mut guard) = self.shared_test_result.lock() {
+                if let Some(result) = guard.take() {
+                    self.test_result = Some(result);
+                    self.is_testing_connection = false;
+                    self.test_completed.store(false, Ordering::Relaxed);
+                }
+            }
+        }
+
+        // 检查连接超时
+        self.check_connection_timeouts();
 
         // 读取终端数据（关键：这必须在UI构建之前执行）
         self.read_from_terminal();
@@ -616,12 +669,50 @@ impl eframe::App for App {
 
                                 ui.horizontal(|ui| {
                                     ui.label(self.i18n.get(I18nKey::FontSize));
+
+                                    // 减少字体大小按钮
+                                    if ui.button("−").clicked() {
+                                        let current_size = self.settings.terminal.font_size;
+                                        if current_size > 8.0 {
+                                            self.settings.terminal.font_size =
+                                                (current_size - 1.0).max(8.0);
+                                            // 立即保存设置
+                                            if let Err(e) = self.settings.save() {
+                                                eprintln!("保存设置失败: {}", e);
+                                            } else {
+                                                println!(
+                                                    "字体大小已更新: {}",
+                                                    self.settings.terminal.font_size
+                                                );
+                                            }
+                                        }
+                                    }
+
+                                    // 字体大小输入框
                                     ui.add(
                                         egui::DragValue::new(&mut self.settings.terminal.font_size)
                                             .speed(1.0)
                                             .clamp_range(8.0..=24.0)
                                             .suffix("px"),
                                     );
+
+                                    // 增加字体大小按钮
+                                    if ui.button("+").clicked() {
+                                        let current_size = self.settings.terminal.font_size;
+                                        if current_size < 24.0 {
+                                            self.settings.terminal.font_size =
+                                                (current_size + 1.0).min(24.0);
+                                            // 立即保存设置
+                                            if let Err(e) = self.settings.save() {
+                                                eprintln!("保存设置失败: {}", e);
+                                            } else {
+                                                println!(
+                                                    "字体大小已更新: {}",
+                                                    self.settings.terminal.font_size
+                                                );
+                                            }
+                                        }
+                                    }
                                 });
 
                                 ui.horizontal(|ui| {
@@ -693,7 +784,7 @@ impl App {
                     self.connection_form = ConnectionForm::default();
                     self.editing_connection_name = None;
                     self.show_connection_dialog = true;
-                    ui.close_menu();
+                    ui.close();
                 }
                 if ui.button(self.i18n.get(I18nKey::MenuExit)).clicked() {
                     std::process::exit(0);
@@ -704,14 +795,14 @@ impl App {
                 if ui.button(self.i18n.get(I18nKey::MenuSettings)).clicked() {
                     self.settings_dialog
                         .show(&self.settings, self.i18n.get_language());
-                    ui.close_menu();
+                    ui.close();
                 }
             });
 
             ui.menu_button(self.i18n.get(I18nKey::MenuHelp), |ui| {
                 if ui.button(self.i18n.get(I18nKey::MenuAbout)).clicked() {
                     self.about_dialog.show();
-                    ui.close_menu();
+                    ui.close();
                 }
             });
         });
@@ -808,10 +899,33 @@ impl App {
                     .map(|s| self.extract_base_connection_name(s))
                     == Some(config.name.clone());
 
-                // 使用 top_down_justified 布局让按钮占满宽度且文字左对齐
+                // 使用左右布局：名称左对齐，时间右对齐
                 let response = ui
-                    .with_layout(egui::Layout::top_down_justified(egui::Align::LEFT), |ui| {
-                        ui.selectable_label(is_selected, &config.name)
+                    .with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        // 左侧：连接名称
+                        let name_response = ui
+                            .with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                                ui.selectable_label(is_selected, &config.name)
+                            })
+                            .inner;
+
+                        // 右侧：上次连接时间
+                        if let Some(ref last_connected) = config.last_connected {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                                // 解析时间并格式化
+                                match chrono::DateTime::parse_from_rfc3339(last_connected) {
+                                    Ok(datetime) => {
+                                        let local_time = datetime.with_timezone(&chrono::Local);
+                                        ui.weak(local_time.format("%Y-%m-%d %H:%M").to_string());
+                                    }
+                                    Err(_) => {
+                                        // 时间解析失败时不显示
+                                    }
+                                }
+                            });
+                        }
+
+                        name_response
                     })
                     .inner;
 
@@ -825,14 +939,14 @@ impl App {
                         .clicked()
                     {
                         self.connect_from_history(config.clone());
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui
                         .button(&format!("{} {}", "✏", self.i18n.get(I18nKey::Edit)))
                         .clicked()
                     {
                         self.edit_connection(config.clone());
-                        ui.close_menu();
+                        ui.close();
                     }
                     ui.separator();
                     if ui
@@ -844,7 +958,7 @@ impl App {
                         .clicked()
                     {
                         self.clear_connection_history(original_index);
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui
                         .button(&format!(
@@ -855,14 +969,14 @@ impl App {
                         .clicked()
                     {
                         self.delete_connection(original_index);
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
             });
         }
 
         ui.separator();
-        if ui.button(&format!("{} {}", "🗑", "清空所有历史")).clicked() {
+        if ui.button(self.i18n.get(I18nKey::ClearAllHistory)).clicked() {
             for config in self.connection_history.iter_mut() {
                 config.last_connected = None;
             }
@@ -942,7 +1056,7 @@ impl App {
                                         .clicked()
                                     {
                                         self.connect_from_group(group_index, base_conn_name);
-                                        ui.close_menu();
+                                        ui.close();
                                     }
                                     if ui
                                         .button(&format!(
@@ -956,7 +1070,7 @@ impl App {
                                             group_index,
                                             base_conn_name,
                                         );
-                                        ui.close_menu();
+                                        ui.close();
                                     }
                                     ui.separator();
                                     if ui
@@ -971,7 +1085,7 @@ impl App {
                                             group_index,
                                             base_conn_name,
                                         );
-                                        ui.close_menu();
+                                        ui.close();
                                     }
                                     if let Some(h_idx) =
                                         find_history_index(&self.connection_history, base_conn_name)
@@ -985,7 +1099,7 @@ impl App {
                                             .clicked()
                                         {
                                             self.delete_connection(h_idx);
-                                            ui.close_menu();
+                                            ui.close();
                                         }
                                     }
                                 });
@@ -1006,14 +1120,14 @@ impl App {
                         .clicked()
                     {
                         self.edit_group(group_index);
-                        ui.close_menu();
+                        ui.close();
                     }
                     if ui
                         .button(&format!("{} {}", "🗑", self.i18n.get(I18nKey::DeleteGroup)))
                         .clicked()
                     {
                         self.delete_group(group_index);
-                        ui.close_menu();
+                        ui.close();
                     }
                 });
         }
@@ -1082,7 +1196,7 @@ impl App {
         } else {
             // 显示欢迎界面
             ui.centered_and_justified(|ui| {
-                ui.heading("欢迎使用 TermLink");
+                ui.heading(self.i18n.get(I18nKey::WelcomeMessage));
             });
         }
     }
@@ -1095,10 +1209,23 @@ impl App {
     ) {
         let (name, host, port, state) = session_info;
 
-        // 显示连接信息
-        ui.label(format!("连接到: {}", name));
-        ui.label(format!("主机: {}:{}", host, port));
-        ui.label(format!("状态: {}", self.format_session_state(state)));
+        // 显示连接信息（一行显示）
+        ui.horizontal(|ui| {
+            ui.label(format!("{}: {}", self.i18n.get(I18nKey::ConnectedTo), name));
+            ui.label(" | ");
+            ui.label(format!(
+                "{}: {}:{} ",
+                self.i18n.get(I18nKey::Host),
+                host,
+                port
+            ));
+            ui.label(" | ");
+            ui.label(format!(
+                "{}: {}",
+                self.i18n.get(I18nKey::Status),
+                self.format_session_state(state)
+            ));
+        });
 
         // 显示终端
         egui::ScrollArea::vertical()
@@ -1114,10 +1241,12 @@ impl App {
                         } else {
                             crate::terminal::ThemeStyle::dark()
                         };
-                        let theme = crate::terminal::TerminalTheme::new(
-                            theme_style,
-                            self.settings.terminal.font_size,
-                        );
+                        let theme = crate::terminal::TerminalTheme {
+                            style: theme_style,
+                            font_size: self.settings.terminal.font_size,
+                            line_height: 1.2,
+                            cursor_blink: self.settings.terminal.cursor_blink,
+                        };
                         emulator.update_theme(theme.clone());
 
                         // 在渲染前计算并更新终端仿真器的尺寸，确保 PTY 大小与 UI 匹配
@@ -1149,11 +1278,10 @@ impl App {
                         }
 
                         let buffer = emulator.buffer();
-                        let mut renderer = crate::terminal::TerminalRenderer {
-                            buffer,
-                            theme,
-                            font_id: egui::FontId::monospace(self.settings.terminal.font_size),
-                        };
+                        let mut renderer =
+                            crate::terminal::TerminalRenderer::new(buffer.rows, buffer.cols, theme);
+                        // 更新缓冲区内容
+                        renderer.buffer = buffer;
 
                         egui::Frame::canvas(ui.style())
                             .inner_margin(0.0)
@@ -1486,6 +1614,39 @@ impl App {
 
                         ui.separator();
 
+                        // 显示测试状态
+                        if self.is_testing_connection {
+                            ui.group(|ui| {
+                                ui.vertical(|ui| {
+                                    ui.label("正在测试连接...");
+                                    ui.spinner();
+                                });
+                            });
+                            ui.add_space(10.0);
+                        } else if let Some(ref result) = self.test_result {
+                            ui.group(|ui| {
+                                ui.vertical(|ui| {
+                                    let result_text = if result.success {
+                                        self.i18n.get(I18nKey::TestConnectionSuccess)
+                                    } else {
+                                        self.i18n.get(I18nKey::TestConnectionFailed)
+                                    };
+
+                                    ui.label(result_text);
+                                    ui.label(&result.message);
+
+                                    if let Some(latency) = result.latency {
+                                        ui.label(format!(
+                                            "{}: {} ms",
+                                            self.i18n.get(I18nKey::TestConnectionLatency),
+                                            latency
+                                        ));
+                                    }
+                                });
+                            });
+                            ui.add_space(10.0);
+                        }
+
                         ui.horizontal(|ui| {
                             if ui.button(self.i18n.get(I18nKey::QuickConnect)).clicked() {
                                 self.quick_connect();
@@ -1528,8 +1689,59 @@ impl App {
 
     /// 测试连接
     fn test_connection(&mut self) {
-        // TODO: 实现连接测试功能
-        println!("测试连接功能待实现");
+        // 检查必要字段是否填写
+        if self.connection_form.host.is_empty() || self.connection_form.username.is_empty() {
+            self.test_result = Some(crate::ssh::ConnectionTestResult {
+                success: false,
+                message: "请填写主机地址和用户名".to_string(),
+                latency: None,
+            });
+            return;
+        }
+
+        // 设置测试状态
+        self.is_testing_connection = true;
+        self.test_result = None;
+        self.test_completed.store(false, Ordering::Relaxed);
+
+        // 创建连接配置用于测试
+        let config = ConnectionConfig {
+            name: "test_connection".to_string(),
+            host: self.connection_form.host.clone(),
+            port: self.connection_form.port,
+            username: self.connection_form.username.clone(),
+            use_key_auth: self.connection_form.use_key_auth,
+            password: if !self.connection_form.use_key_auth {
+                Some(self.connection_form.password.clone())
+            } else {
+                None
+            },
+            private_key_path: if self.connection_form.use_key_auth {
+                Some(self.connection_form.private_key_path.clone())
+            } else {
+                None
+            },
+            last_connected: None,
+            group: None,
+        };
+
+        // 克隆需要的数据
+        let config_clone = config.clone();
+        let shared_result = self.shared_test_result.clone();
+        let test_completed = self.test_completed.clone();
+
+        // 在后台线程中执行测试
+        std::thread::spawn(move || {
+            let result = crate::ssh::test_connection(&config_clone);
+
+            // 将结果存储到共享内存
+            if let Ok(mut guard) = shared_result.lock() {
+                *guard = Some(result);
+            }
+
+            // 标记测试完成
+            test_completed.store(true, Ordering::Relaxed);
+        });
     }
 
     /// 保存到分组
@@ -1952,6 +2164,52 @@ impl App {
         session_name.to_string()
     }
 
+    /// 检查连接超时
+    fn check_connection_timeouts(&mut self) {
+        let manager = self.connection_manager.lock().unwrap();
+        let active_sessions = manager.get_active_sessions();
+        drop(manager);
+
+        let now = std::time::Instant::now();
+
+        for session_name in active_sessions {
+            // 检查会话是否在连接中状态
+            let manager = self.connection_manager.lock().unwrap();
+            let session_state = manager
+                .get_session(&session_name)
+                .map(|s| s.state().clone());
+            drop(manager);
+
+            if let Some(SessionState::Connecting) = session_state {
+                // 检查是否超时
+                if let Some(start_time) = self.session_start_times.get(&session_name) {
+                    let elapsed = now.duration_since(*start_time).as_secs();
+                    if elapsed > self.connection_timeout {
+                        // 超时，设置为错误状态
+                        let mut manager = self.connection_manager.lock().unwrap();
+                        if let Some(mut session) = manager.get_session(&session_name) {
+                            session.state = SessionState::Error(format!(
+                                "连接超时 ({}秒)",
+                                self.connection_timeout
+                            ));
+                            // 重新插入更新后的会话
+                            manager.add_session(session_name.clone(), session);
+                        }
+                        drop(manager);
+
+                        // 移除超时记录
+                        self.session_start_times.remove(&session_name);
+
+                        println!("会话 {} 连接超时", session_name);
+                    }
+                }
+            } else {
+                // 如果会话不再是连接中状态，移除时间记录
+                self.session_start_times.remove(&session_name);
+            }
+        }
+    }
+
     /// 渲染会话标签页
     fn render_session_tabs(&mut self, ui: &mut egui::Ui) {
         let manager = self.connection_manager.lock().unwrap();
@@ -1963,23 +2221,75 @@ impl App {
                 for session_name in active_sessions {
                     let is_selected = self.current_session.as_ref() == Some(&session_name);
 
-                    ui.horizontal(|ui| {
-                        if ui.selectable_label(is_selected, &session_name).clicked() {
-                            self.current_session = Some(session_name.clone());
-                        }
+                    // 获取会话状态
+                    let manager = self.connection_manager.lock().unwrap();
+                    let session_state = manager
+                        .get_session(&session_name)
+                        .map(|s| s.state().clone())
+                        .unwrap_or(SessionState::Disconnected);
+                    drop(manager);
 
-                        // 添加关闭按钮
-                        if ui.small_button("x").clicked() {
-                            self.close_session(&session_name);
-                        }
-                    });
+                    // 根据状态确定图标、颜色和动画
+                    let (icon_char, icon_color, is_spinning) = match session_state {
+                        SessionState::Connected => ('●', egui::Color32::GREEN, false),
+                        SessionState::Connecting => ('◐', egui::Color32::ORANGE, true),
+                        SessionState::Error(_) => ('✖', egui::Color32::RED, false),
+                        SessionState::Disconnected => ('○', egui::Color32::GRAY, false),
+                    };
+
+                    // 创建带有状态图标和关闭按钮的会话标签
+                    let button_response = ui
+                        .horizontal(|ui| {
+                            // 状态图标（带动画效果）
+                            let icon_text: &str = if is_spinning {
+                                // 简单的旋转动画效果
+                                let frame = (ui.ctx().input(|i| i.time) * 2.0) as i32 % 4;
+                                match frame {
+                                    0 => "●",
+                                    1 => "○",
+                                    2 => "●",
+                                    3 => "○",
+                                    _ => "●",
+                                }
+                            } else {
+                                match icon_char {
+                                    '●' => "●",
+                                    '○' => "○",
+                                    '✖' => "✖",
+                                    '◐' => "◐",
+                                    _ => "○",
+                                }
+                            };
+
+                            ui.colored_label(icon_color, icon_text);
+
+                            // 会话名称
+                            let label_response = ui.selectable_label(is_selected, &session_name);
+                            if label_response.middle_clicked() {
+                                self.close_session(&session_name);
+                            }
+
+                            // 关闭按钮（使用更合适的图标）
+                            // ui.add_space(4.0);
+                            if ui.small_button("×").clicked() {
+                                self.close_session(&session_name);
+                            }
+
+                            label_response
+                        })
+                        .inner;
+
+                    // 处理点击事件
+                    if button_response.clicked() {
+                        self.current_session = Some(session_name.clone());
+                    }
 
                     ui.separator();
                 }
             });
             ui.separator();
         } else {
-            ui.label("暂无活动连接");
+            ui.label(self.i18n.get(I18nKey::NoActiveConnections));
             ui.separator();
         }
     }
@@ -2071,7 +2381,12 @@ impl App {
         self.terminal_emulators
             .insert(session_name.clone(), emulator);
 
-        // 9. 在后台线程中执行连接
+        // 9. 记录连接开始时间（用于超时检查）
+        let start_time = std::time::Instant::now();
+        self.session_start_times
+            .insert(session_name.clone(), start_time);
+
+        // 10. 在后台线程中执行连接
         let manager_arc = self.connection_manager.clone();
         let config_clone = config.clone();
         let session_name_clone = session_name.clone();
@@ -2316,8 +2631,12 @@ impl App {
         } else {
             crate::terminal::ThemeStyle::dark()
         };
-        let theme =
-            crate::terminal::TerminalTheme::new(theme_style, self.settings.terminal.font_size);
+        let theme = crate::terminal::TerminalTheme {
+            style: theme_style,
+            font_size: self.settings.terminal.font_size,
+            line_height: 1.2,
+            cursor_blink: self.settings.terminal.cursor_blink,
+        };
 
         // 更新所有已存在的终端仿真器主题
         for (_, emulator) in self.terminal_emulators.iter_mut() {

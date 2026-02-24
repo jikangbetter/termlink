@@ -41,10 +41,26 @@ pub struct SshClient {
 impl SshClient {
     /// 创建新的SSH客户端
     pub fn new(config: SshConfig) -> Result<Self> {
-        let tcp = TcpStream::connect((config.host.as_str(), config.port))?;
+        // 设置TCP连接超时
+        let timeout = std::time::Duration::from_secs(config.timeout.unwrap_or(30));
+
+        let tcp = TcpStream::connect_timeout(
+            &std::net::SocketAddr::new(
+                config
+                    .host
+                    .parse()
+                    .map_err(|_| anyhow::anyhow!("Invalid host address"))?,
+                config.port,
+            ),
+            timeout,
+        )?;
 
         let mut session = Session::new()?;
         session.set_tcp_stream(tcp);
+
+        // 设置会话超时
+        session.set_timeout(timeout.as_millis() as u32);
+
         session.handshake()?;
 
         // 认证

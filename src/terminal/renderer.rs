@@ -10,6 +10,10 @@ pub struct TerminalRenderer {
     pub buffer: TerminalBuffer,
     pub theme: TerminalTheme,
     pub font_id: egui::FontId,
+    /// 光标闪烁计时器
+    cursor_blink_timer: std::time::Instant,
+    /// 光标是否可见
+    cursor_visible: bool,
 }
 
 impl TerminalRenderer {
@@ -21,6 +25,8 @@ impl TerminalRenderer {
             buffer,
             theme,
             font_id,
+            cursor_blink_timer: std::time::Instant::now(),
+            cursor_visible: true,
         }
     }
 
@@ -178,12 +184,27 @@ impl TerminalRenderer {
     }
 
     fn render_cursor(
-        &self,
+        &mut self,
         painter: &egui::Painter,
         screen_origin: egui::Pos2,
         char_size: egui::Vec2,
     ) {
         if self.buffer.cursor_row < self.buffer.rows && self.buffer.cursor_col < self.buffer.cols {
+            // 处理光标闪烁
+            if self.theme.cursor_blink {
+                let elapsed = self.cursor_blink_timer.elapsed().as_millis();
+                // 500ms切换一次可见性
+                if elapsed > 500 {
+                    self.cursor_visible = !self.cursor_visible;
+                    self.cursor_blink_timer = std::time::Instant::now();
+                }
+
+                // 如果光标不可见，直接返回
+                if !self.cursor_visible {
+                    return;
+                }
+            }
+
             // 获取当前光标位置字符的宽度
             let width = if let Some(cell) = self
                 .buffer

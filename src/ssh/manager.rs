@@ -193,7 +193,7 @@ impl Default for ConnectionManager {
 }
 
 /// 连接测试结果
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConnectionTestResult {
     pub success: bool,
     pub message: String,
@@ -214,7 +214,7 @@ pub fn test_connection(config: &ConnectionConfig) -> ConnectionTestResult {
         password: if config.use_key_auth {
             None
         } else {
-            Some("".to_string()) // 测试时使用空密码
+            config.password.clone() // 使用配置中的实际密码
         },
         private_key_path: config.private_key_path.clone(),
         timeout: Some(10), // 10秒超时

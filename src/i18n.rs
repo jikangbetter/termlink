@@ -152,6 +152,18 @@ pub enum I18nKey {
     Close,
     Yes,
     No,
+    // 欢迎信息
+    WelcomeMessage,
+    // 历史记录操作
+    ClearAllHistory,
+    // 连接信息显示
+    ConnectedTo,
+    Host,
+    Status,
+    // 测试连接结果
+    TestConnectionSuccess,
+    TestConnectionFailed,
+    TestConnectionLatency,
 }
 
 /// 国际化管理器
@@ -286,6 +298,22 @@ impl I18nManager {
         // 连接表单
         zh_translations.insert(I18nKey::PasswordLabel, "密码:");
 
+        // 欢迎信息
+        zh_translations.insert(I18nKey::WelcomeMessage, "欢迎使用 TermLink");
+
+        // 历史记录操作
+        zh_translations.insert(I18nKey::ClearAllHistory, "🗑 清空所有历史");
+
+        // 连接信息显示
+        zh_translations.insert(I18nKey::ConnectedTo, "连接到");
+        zh_translations.insert(I18nKey::Host, "主机");
+        zh_translations.insert(I18nKey::Status, "状态");
+
+        // 测试连接结果
+        zh_translations.insert(I18nKey::TestConnectionSuccess, "连接测试成功");
+        zh_translations.insert(I18nKey::TestConnectionFailed, "连接测试失败");
+        zh_translations.insert(I18nKey::TestConnectionLatency, "延迟");
+
         zh_translations.insert(I18nKey::Ok, "确定");
         zh_translations.insert(I18nKey::Close, "关闭");
         zh_translations.insert(I18nKey::Yes, "是");
@@ -399,6 +427,22 @@ impl I18nManager {
 
         // Connection form
         en_translations.insert(I18nKey::PasswordLabel, "Password:");
+
+        // Welcome message
+        en_translations.insert(I18nKey::WelcomeMessage, "Welcome to TermLink");
+
+        // History operations
+        en_translations.insert(I18nKey::ClearAllHistory, "🗑 Clear All History");
+
+        // Connection info display
+        en_translations.insert(I18nKey::ConnectedTo, "Connected to");
+        en_translations.insert(I18nKey::Host, "Host");
+        en_translations.insert(I18nKey::Status, "Status");
+
+        // Test connection results
+        en_translations.insert(I18nKey::TestConnectionSuccess, "Connection test successful");
+        en_translations.insert(I18nKey::TestConnectionFailed, "Connection test failed");
+        en_translations.insert(I18nKey::TestConnectionLatency, "Latency");
 
         en_translations.insert(I18nKey::Ok, "OK");
         en_translations.insert(I18nKey::Close, "Close");
