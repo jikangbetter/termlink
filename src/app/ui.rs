@@ -679,21 +679,7 @@ impl eframe::App for App {
         }
 
         // 应用主题色，确保手动切换主题能立即生效
-        let is_currently_dark = ctx.style().visuals.dark_mode;
-
-        let should_be_dark = match self.settings.appearance.theme_mode {
-            ThemeMode::Dark => true,
-            ThemeMode::Light => false,
-            ThemeMode::Auto => self.settings.appearance.system_theme == "dark",
-        };
-
-        if is_currently_dark != should_be_dark {
-            if should_be_dark {
-                ctx.set_visuals(egui::Visuals::dark());
-            } else {
-                ctx.set_visuals(egui::Visuals::light());
-            }
-        }
+        self.apply_app_visuals(ctx);
 
         // 添加调试信息
         // println!("Update called at {:?}", std::time::Instant::now());
@@ -773,6 +759,82 @@ impl eframe::App for App {
 }
 
 impl App {
+    /// 更新应用的主题视觉效果
+    fn apply_app_visuals(&mut self, ctx: &egui::Context) {
+        use crate::config::settings::ThemeMode;
+
+        let theme_str = self.settings.get_current_theme();
+
+        let visuals = if theme_str == "custom" {
+            if let Some(ref custom) = self.settings.terminal.custom_theme {
+                let bg = crate::terminal::ThemeStyle::parse_hex(&custom.background);
+                let fg = crate::terminal::ThemeStyle::parse_hex(&custom.foreground);
+
+                // 判断背景深浅
+                let is_dark = {
+                    let r = bg.r() as f32;
+                    let g = bg.g() as f32;
+                    let b = bg.b() as f32;
+                    let lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+                    lum < 0.5
+                };
+
+                let mut v = if is_dark {
+                    egui::Visuals::dark()
+                } else {
+                    egui::Visuals::light()
+                };
+
+                // 设置背景色
+                v.panel_fill = bg;
+                v.window_fill = bg;
+
+                // 强制应用前景色
+                v.override_text_color = Some(fg);
+
+                // 设置前景色描边
+                v.widgets.noninteractive.fg_stroke.color = fg;
+                v.widgets.inactive.fg_stroke.color = fg;
+                v.widgets.hovered.fg_stroke.color = fg;
+                v.widgets.active.fg_stroke.color = fg;
+
+                // 设置背景区域
+                v.widgets.noninteractive.bg_fill = bg;
+                v.widgets.inactive.bg_fill = bg;
+                v.widgets.hovered.bg_fill = bg;
+                v.widgets.active.bg_fill = bg;
+
+                // 重点设置：选择颜色
+                v.selection.bg_fill = crate::terminal::ThemeStyle::parse_hex(&custom.selection);
+
+                v
+            } else {
+                egui::Visuals::dark()
+            }
+        } else {
+            let should_be_dark = match self.settings.appearance.theme_mode {
+                ThemeMode::Dark => true,
+                ThemeMode::Light => false,
+                ThemeMode::Auto => self.settings.appearance.system_theme == "dark",
+            };
+
+            if should_be_dark {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            }
+        };
+
+        // 只有在不同的时候才设置
+        if ctx.style().visuals.dark_mode != visuals.dark_mode
+            || ctx.style().visuals.panel_fill != visuals.panel_fill
+            || (theme_str == "custom"
+                && ctx.style().visuals.selection.bg_fill != visuals.selection.bg_fill)
+        {
+            ctx.set_visuals(visuals);
+        }
+    }
+
     /// 菜单栏
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::menu::bar(ui, |ui| {
